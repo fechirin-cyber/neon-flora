@@ -28,6 +28,12 @@
 - 新規プロジェクトは `--editor --quit` で `.godot/` キャッシュを生成してから `--check-only` を実行
 - `--check-only` はエラーがないとプロセスが終了しない（タイムアウトで判定）
 
+### Android APK ビルドの必須条件
+- `project.godot` に `textures/vram_compression/import_etc2_astc=true` が**必須**
+- これがないと "configuration errors" で即失敗する（エラー詳細は表示されない）
+- `export_presets.cfg` のキーストアパスは `C:/Android/Sdk/debug.keystore`（editor_settings準拠）
+- 旧パス `C:/android-sdk/` ではなく `C:/Android/Sdk/` を使うこと
+
 ### windows/ ディレクトリ
 - `.gdignore` を配置してエクスポートパック対象外にすること
 - スクリーンショット等のテスト成果物がPCKに含まれてしまう
