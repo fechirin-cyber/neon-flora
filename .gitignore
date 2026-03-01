@@ -1,0 +1,18 @@
+# Godot
+.godot/
+*.import
+
+# Build artifacts
+windows/*.exe
+windows/*.console.exe
+windows/*.apk
+windows/*.pck
+windows/debug_state.json
+windows/godot_test.log
+
+# Screenshots (test artifacts)
+windows/screenshots/
+
+# OS
+.DS_Store
+Thumbs.db

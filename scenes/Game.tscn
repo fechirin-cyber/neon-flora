@@ -1,0 +1,83 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
+
+[node name="Game" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_game")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.039, 0.039, 0.118, 1)
+
+[node name="StateLabel" type="Label" parent="."]
+layout_mode = 1
+offset_left = 30.0
+offset_top = 40.0
+offset_right = 870.0
+offset_bottom = 90.0
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.92, 0.92, 1.0, 1)
+text = "State: IDLE"
+
+[node name="CreditLabel" type="Label" parent="."]
+layout_mode = 1
+offset_left = 30.0
+offset_top = 110.0
+offset_right = 870.0
+offset_bottom = 170.0
+theme_override_font_sizes/font_size = 26
+theme_override_colors/font_color = Color(0.0, 1.0, 0.53, 1)
+text = "CREDIT: 50"
+
+[node name="ReelLabel" type="Label" parent="."]
+layout_mode = 1
+offset_left = 30.0
+offset_top = 280.0
+offset_right = 870.0
+offset_bottom = 550.0
+theme_override_font_sizes/font_size = 32
+theme_override_colors/font_color = Color(1.0, 0.843, 0.0, 1)
+text = ""
+
+[node name="InfoLabel" type="Label" parent="."]
+layout_mode = 1
+offset_left = 30.0
+offset_top = 620.0
+offset_right = 870.0
+offset_bottom = 720.0
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(1.0, 0.08, 0.58, 1)
+text = "Press [B] to BET, then [SPACE] for LEVER"
+
+[node name="ButtonsLabel" type="Label" parent="."]
+layout_mode = 1
+offset_left = 30.0
+offset_top = 780.0
+offset_right = 870.0
+offset_bottom = 830.0
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.0, 0.83, 1.0, 1)
+text = "[B:BET]"
+
+[node name="HelpLabel" type="Label" parent="."]
+layout_mode = 1
+offset_left = 30.0
+offset_top = 1420.0
+offset_right = 870.0
+offset_bottom = 1580.0
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.4, 0.4, 0.5, 1)
+autowrap_mode = 3
+text = "Controls: B=BET  SPACE=LEVER  Z/X/C=STOP L/C/R
+Debug: D=BIG  R=REG  T=+1000cr  P=dump state"
