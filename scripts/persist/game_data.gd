@@ -152,6 +152,16 @@ func _apply_data(data: Dictionary) -> void:
 
 	current_flag = maxi(data.get("current_flag", 0), 0)
 
+func reset_stats() -> void:
+	total_games = 0
+	big_count = 0
+	reg_count = 0
+	total_in = 0
+	total_out = 0
+	coin_history = []
+	bonus_history = []
+	save()
+
 func add_history_point() -> void:
 	var diff := total_out - total_in
 	coin_history.append(diff)

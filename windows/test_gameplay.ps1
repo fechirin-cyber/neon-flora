@@ -1,5 +1,5 @@
-# NEON FLORA — Basic Gameplay Test (プリプロ)
-# Tests: Launch → 3 games (BET→LEVER→STOP×3→判定→IDLE復帰)
+# NEON FLORA — Alpha Gameplay Test
+# Tests: Launch → TitleScreen → PLAY → Game (BET→LEVER→STOP×3→判定→IDLE復帰) × 3
 
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms
@@ -12,11 +12,13 @@ $LOG_FILE = "$PROJECT\windows\godot_test.log"
 $STATE_FILE = "$PROJECT\windows\debug_state.json"
 
 if (!(Test-Path $SCREENSHOT_DIR)) { New-Item -ItemType Directory -Path $SCREENSHOT_DIR | Out-Null }
+# Clean old screenshots
+Get-ChildItem -Path $SCREENSHOT_DIR -Filter "*.png" | Remove-Item -Force
 
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public class Win32NF {
+public class Win32NFA {
     [DllImport("user32.dll")] public static extern IntPtr FindWindow(string cls, string title);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
@@ -53,9 +55,9 @@ function FocusGodot() {
     }
     if ($script:godotHwnd -ne [IntPtr]::Zero) {
         for ($i = 0; $i -lt 3; $i++) {
-            [Win32NF]::SetForegroundWindow($script:godotHwnd) | Out-Null
+            [Win32NFA]::SetForegroundWindow($script:godotHwnd) | Out-Null
             Start-Sleep -Milliseconds 50
-            $fg = [Win32NF]::GetForegroundWindow()
+            $fg = [Win32NFA]::GetForegroundWindow()
             if ($fg -eq $script:godotHwnd) { return }
             Start-Sleep -Milliseconds 100
         }
@@ -65,15 +67,16 @@ function FocusGodot() {
 $script:VK_MAP = @{
     " " = 0x20; "b" = 0x42; "z" = 0x5A; "x" = 0x58; "c" = 0x43
     "p" = 0x50; "d" = 0x44; "r" = 0x52; "t" = 0x54
+    "ENTER" = 0x0D
 }
 
 function PressKey($key) {
     FocusGodot
     $vk = $script:VK_MAP[$key]
     if ($null -eq $vk) { $vk = [int][char]$key.ToUpper() }
-    [Win32NF]::keybd_event([byte]$vk, 0, 0, 0)
+    [Win32NFA]::keybd_event([byte]$vk, 0, 0, 0)
     Start-Sleep -Milliseconds 30
-    [Win32NF]::keybd_event([byte]$vk, 0, 2, 0)
+    [Win32NFA]::keybd_event([byte]$vk, 0, 2, 0)
     Start-Sleep -Milliseconds 100
 }
 
@@ -155,7 +158,7 @@ function PlayOneGame($label) {
 }
 
 try {
-    Write-Host "=== NEON FLORA - Basic Gameplay Test ==="
+    Write-Host "=== NEON FLORA - Alpha Gameplay Test ==="
 
     if (Test-Path $LOG_FILE) { Remove-Item $LOG_FILE }
     if (Test-Path $STATE_FILE) { Remove-Item $STATE_FILE }
@@ -168,20 +171,47 @@ try {
     Start-Sleep -Seconds 4
     CheckProcess
 
-    TakeScreenshot "01_launch" | Out-Null
-    Write-Host "Game launched" -ForegroundColor Green
+    # 01: Title Screen screenshot
+    TakeScreenshot "01_title_screen" | Out-Null
+    Write-Host "Title screen captured" -ForegroundColor Green
+
+    # Navigate: Title Screen → Game (SPACE or ENTER)
+    Write-Host "Navigating to game..."
+    PressKey " "
+    Start-Sleep -Seconds 3
+
+    # 02: Game screen screenshot
+    TakeScreenshot "02_game_screen" | Out-Null
+    Write-Host "Game screen captured" -ForegroundColor Green
 
     # Add credit for testing
     PressKey "t"
     Start-Sleep -Milliseconds 500
 
+    # Play 3 games
     for ($g = 1; $g -le 3; $g++) {
         Write-Host "Game $g..."
         PlayOneGame "game_$g"
     }
 
+    # Debug bonus test: trigger BIG
+    Write-Host "Testing BIG bonus trigger..."
+    PressKey "d"
+    Start-Sleep -Milliseconds 500
+    TakeScreenshot "03_bonus_trigger" | Out-Null
+
+    # Play 1 game in bonus
+    PlayOneGame "bonus_1"
+    TakeScreenshot "04_bonus_play" | Out-Null
+
+    # Final state dump
+    $finalState = DumpState
+    if ($finalState) {
+        Write-Host "`nFinal state: $($finalState | ConvertTo-Json -Compress)" -ForegroundColor Cyan
+    }
+
     # Final screenshot
-    TakeScreenshot "final" | Out-Null
+    TakeScreenshot "05_final" | Out-Null
 
     Write-Host "`n============================================"
     Write-Host "  ALL TESTS PASSED" -ForegroundColor Green

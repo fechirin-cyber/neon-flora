@@ -35,6 +35,9 @@ var _stopped_count: int = 0
 var _bonus: BonusController = BonusController.new()
 var _wait_timer: WaitTimer = WaitTimer.new()
 
+# S-1: 再入防止フラグ
+var _lever_processing: bool = false
+
 # === BET処理 ===
 func do_bet(amount: int = 3) -> bool:
 	if game_state in [GameState.SPINNING, GameState.STOPPING, GameState.PAYING, GameState.WAITING]:
@@ -48,8 +51,11 @@ func do_bet(amount: int = 3) -> bool:
 
 # === レバーON ===
 func pull_lever() -> void:
+	if _lever_processing:
+		return  # S-1: 再入防止
 	if game_state in [GameState.SPINNING, GameState.STOPPING, GameState.PAYING, GameState.WAITING]:
 		return
+	_lever_processing = true
 
 	# ウェイトチェック
 	var current_time := Time.get_ticks_msec() / 1000.0
@@ -106,6 +112,7 @@ func pull_lever() -> void:
 		await get_tree().create_timer(0.4).timeout
 
 	_change_state(GameState.SPINNING)
+	_lever_processing = false
 
 # === リール停止 ===
 func stop_reel(reel_idx: int, pressed_pos: int) -> void:
@@ -151,7 +158,7 @@ func _on_all_stopped() -> void:
 	if is_replay:
 		payout_started.emit(0, current_flag)
 	elif payout > 0:
-		GameData.credit += payout
+		GameData.credit = mini(GameData.credit + payout, GameData.MAX_CREDIT)  # S-4: 9999クランプ
 		GameData.total_out += payout
 		credit_changed.emit(GameData.credit)
 		_change_state(GameState.PAYING)
@@ -329,6 +336,47 @@ func get_last_bonus_between() -> int:
 func is_in_bonus() -> bool:
 	return _bonus.is_in_bonus()
 
+# === 中断復帰 (S-2: §2.4, §11) ===
+func restore_from_save() -> void:
+	var state_str: String = GameData.saved_game_state
+	match state_str:
+		"BONUS":
+			# ボーナス状態復元
+			if GameData.bonus_stocked_type != "":
+				var flag := _parse_flag(GameData.bonus_stocked_type)
+				if flag != PayTable.Flag.HAZURE:
+					_bonus.bonus_type_internal = flag
+					_bonus.bonus_type = "BIG" if PayTable.is_big(flag) else "REG"
+					_bonus.bonus_games_played = GameData.bonus_games_played
+					_bonus.bonus_games_max = GameData.bonus_games_max
+					_change_state(GameState.BONUS)
+					return
+			# 復元失敗 → IDLE
+			_change_state(GameState.IDLE)
+		"RT":
+			if GameData.rt_active and GameData.rt_remaining > 0:
+				_bonus.rt_active = true
+				_bonus.rt_remaining = GameData.rt_remaining
+				_bonus.rt_bonus_rate = GameData.rt_bonus_rate
+				_change_state(GameState.RT)
+				return
+			_change_state(GameState.IDLE)
+		_:
+			# SPINNING/STOPPING/WAITING中の中断 → BET返却済みでIDLE
+			_change_state(GameState.IDLE)
+
+	# ボーナスストック復元
+	if GameData.bonus_stocked and GameData.bonus_stocked_type != "":
+		var flag := _parse_flag(GameData.bonus_stocked_type)
+		if flag != PayTable.Flag.HAZURE:
+			_bonus.stock_bonus(flag)
+
+func _parse_flag(flag_name: String) -> PayTable.Flag:
+	for i in range(PayTable.Flag.size()):
+		if PayTable.Flag.keys()[i] == flag_name:
+			return i as PayTable.Flag
+	return PayTable.Flag.HAZURE
+
 # === 設定変更 ===
 func change_setting(s: int) -> void:
 	GameData.setting = clampi(s, 1, 6)
@@ -347,7 +395,7 @@ func debug_start_bonus_now(type: String) -> void:
 	_start_bonus()
 
 func debug_add_credit(amount: int) -> void:
-	GameData.credit += amount
+	GameData.credit = mini(GameData.credit + amount, GameData.MAX_CREDIT)
 	GameData.save()
 	credit_changed.emit(GameData.credit)
 

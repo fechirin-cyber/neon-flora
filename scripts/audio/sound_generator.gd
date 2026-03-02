@@ -338,3 +338,44 @@ func _gen_rt_start() -> AudioStreamWAV:
 		var val := _sine(t * freq) * 0.5
 		data.append_array(_pack_sample(val * env * 0.5))
 	return _make_wav(data)
+
+# --- BGM プロシージャル生成 (§10.2 フォールバック) ---
+
+## AudioManagerから呼ばれるBGMエントリーポイント
+func generate_bgm(bgm_name: String) -> AudioStream:
+	match bgm_name:
+		"title": return _gen_bgm_pad([311.13, 392.0, 466.16], 4.0, 100)    # Eb Major
+		"normal": return _gen_bgm_pad([261.63, 311.13, 392.0], 4.0, 90)     # C Minor
+		"bonus_big": return _gen_bgm_pad([440.0, 554.37, 659.25], 2.0, 140) # A Major
+		"bonus_reg": return _gen_bgm_pad([392.0, 493.88, 587.33], 3.0, 120) # G Major
+		"rt": return _gen_bgm_pad([293.66, 349.23, 440.0], 4.0, 110)        # D Minor
+	return null
+
+## コードパッド型BGM生成（ループ対応）
+func _gen_bgm_pad(chord: Array, duration: float, bpm: int) -> AudioStreamWAV:
+	var total_samples := _samples_for(duration)
+	var data := PackedByteArray()
+	var beat_dur := 60.0 / float(bpm)
+
+	for i in range(total_samples):
+		var t := float(i) / SAMPLE_RATE
+		var val := 0.0
+		# コードパッド（各音にわずかなデチューンで厚み）
+		for idx in range(chord.size()):
+			var freq: float = chord[idx]
+			var detune := 1.0 + float(idx) * 0.002
+			val += _sine(t * freq * detune) * 0.15
+			val += _sine(t * freq * 0.5) * 0.08  # サブオクターブ
+		# ビート感: 低音パルス
+		var beat_phase := fmod(t, beat_dur) / beat_dur
+		var kick := maxf(0.0, 1.0 - beat_phase * 8.0) * _sine(t * 55.0) * 0.2
+		val += kick
+		# LFOによるパッドの揺れ
+		val *= (1.0 + sin(t * 0.5) * 0.1)
+		data.append_array(_pack_sample(val * 0.4))
+
+	var wav := _make_wav(data)
+	wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	wav.loop_begin = 0
+	wav.loop_end = total_samples
+	return wav

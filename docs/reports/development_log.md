@@ -253,19 +253,633 @@
 
 ---
 
+## セッション 4（2026-03-01 続き）— α Development (A1-A5)
+
+### 4-1. α開発（A1〜A5 一括実施）
+
+**指示**: 「α開発いきましょう」— Execute the approved α development plan (A1-A5).
+
+**実行内容**:
+
+#### A1: SHOULD修正 + 基盤整備
+
+- **S-1**: `slot_engine.gd` — `pull_lever()` 再入防止（`_lever_processing` フラグ追加）
+- **S-2**: `slot_engine.gd` — `restore_from_save()` ゲーム中状態復帰の実装
+- **S-3**: `audio_manager.gd` — BGMクロスフェード Tween kill 管理
+- **S-4**: `slot_engine.gd` — Credit 9999 clamp
+- **S-5**: `game.gd` — ボーナス/RT時のBGM切替
+- **S-7**: `reel_logic.gd` — ユニットテスト U1〜U9（1071パターン）
+- DSEG7 フォントダウンロード（`assets/fonts/`）
+- ディレクトリ構造整備: `scripts/ui/`, `shaders/`, `scenes/ui/`
+
+#### A2: SubViewportリール描画
+
+- `scripts/ui/reel_strip.gd`（NEW 約230行）— 単リール状態マシン + 物理スクロール
+- `scripts/ui/reel_renderer.gd`（NEW 約95行）— 3リールマネージャー（SubViewport）
+- `shaders/backlight.gdshader`（NEW）— 暖白バックライト
+- `shaders/reel_shadow.gdshader`（NEW）— エッジシャドウ（smoothstep）
+- `scenes/Game.tscn` — ReelRenderer統合
+- `scripts/game.gd` — ReelRenderer対応に書換
+
+#### A3: UI Chrome + 7セグ + ベベルボタン
+
+- `scripts/ui/seven_seg_display.gd`（NEW 約55行）— DSEG7フォント 7セグメントディスプレイ
+- `shaders/seven_seg.gdshader`（NEW）— LEDグロー効果
+- `shaders/button_bevel.gdshader`（NEW）— 3Dベベル効果
+- `shaders/chrome_frame.gdshader`（NEW）— メタリック反射
+- `scenes/Game.tscn` — §8.2 レイアウト全面適用（900x1600）
+- `scripts/game.gd` — 7セグディスプレイ + データカウンタ + 仕様準拠ボタン色
+
+#### A4: キャラクター + VFX + アセット生成
+
+- `scripts/ui/character_panel.gd`（NEW 約100行）— 3キャラ × リアクション管理
+- `shaders/symbol_glow.gdshader`（NEW）— 入賞図柄グロー
+- キャラクター生成スクリプト準備（`tools/gen_hikari_characters.py`, `tools/gen_characters.py`）
+- **注意**: HF_API_KEY 未設定のためキャラクター画像は未生成
+
+#### A5: タイトル/設定画面 + 統合
+
+- `scripts/title_screen.gd`（NEW 約65行）— タイトル画面（PLAY/SETTINGS）
+- `scripts/settings.gd`（NEW 約70行）— 設定画面（統計表示 + リセット）
+- `scenes/TitleScreen.tscn`（NEW）
+- `scenes/Settings.tscn`（NEW）
+- `scripts/persist/game_data.gd` — `reset_stats()` 追加
+- `project.godot` — main_scene → TitleScreen.tscn に変更
+
+### 作成ファイル（24本 新規）
+
+scripts/ui/reel_strip.gd, scripts/ui/reel_renderer.gd, scripts/ui/seven_seg_display.gd, scripts/ui/character_panel.gd, scripts/title_screen.gd, scripts/settings.gd, shaders/backlight.gdshader, shaders/reel_shadow.gdshader, shaders/seven_seg.gdshader, shaders/button_bevel.gdshader, shaders/chrome_frame.gdshader, shaders/symbol_glow.gdshader, scenes/TitleScreen.tscn, scenes/Settings.tscn, tools/gen_hikari_characters.py, tools/gen_characters.py, assets/fonts/DSEG7Classic-Regular.ttf, assets/fonts/DSEG7Classic-Bold.ttf
+
+### 修正ファイル（7本）
+
+scripts/engine/slot_engine.gd, scripts/audio/audio_manager.gd, scripts/engine/reel_logic.gd, scripts/game.gd, scripts/persist/game_data.gd, scenes/Game.tscn, project.godot
+
+### ビルド結果
+
+EXEビルド成功（84MB）。全スクリプトコンパイル通過。エラーなし。
+
+### 未完了事項
+
+- キャラクター画像（HF_API_KEY 未設定）
+- BGM生成（サウンドエージェント未実行）
+- ビジュアル確認（EXE手動起動が必要）
+
+---
+
+## セッション 5（2026-03-01 続き）— αアセット生成
+
+### 5-1. 図柄画像7種 + ゲーム背景 HuggingFace生成
+
+**指示**: 「NEON FLORA パチスロの図柄画像7種とゲーム背景を生成してください」
+
+**実行内容**:
+
+- `tools/gen_alpha_symbols.py` 新規作成（HuggingFace FLUX.1-schnell API生成スクリプト）
+  - API URL: `https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell`
+  - レスポンス形式調査: `Accept: application/json` → JSON文字列にBase64 PNGが格納される形式
+  - 512x512で生成 → Pillowでリサイズ（図柄: 200x160, 背景: 900x1600）
+  - リトライ機能: 503=30秒待ち, 429=60秒待ち, 最大3回
+  - 画像間インターバル: 5秒
+- 旧プレースホルダー画像7枚（1.5KB〜4KB）を高品質AI生成画像に置き換え
+- 旧 `.import` ファイル7本を削除（Godot再インポート促進）
+
+**生成ファイル**:
+
+| ファイル | サイズ | 内容 | カラーテーマ |
+|---|---|---|---|
+| symbol_s7r.png | 30,242B | 赤7（メタリック+ネオングロー） | ネオンレッド (#FF1493系) |
+| symbol_s7b.png | 26,391B | 青7（シアンブルーネオン） | シアンブルー (#00D4FF系) |
+| symbol_bar.png | 22,030B | BARロゴ（クローム+ネオンピンク） | ネオンピンク/クローム |
+| symbol_chr.png | 32,172B | チェリー（光るチェリーペア） | レッド/ネオンピンク |
+| symbol_bel.png | 27,836B | ベル（ゴールドネオングロー） | ゴールド (#FFD700系) |
+| symbol_ice.png | 37,509B | 氷結晶（シアンブルー輝き） | シアン (#00D4FF系) |
+| symbol_rpl.png | 20,975B | リプレイ矢印（ミントグリーン） | ネオングリーン (#00FF88系) |
+| game_bg.png | 930,764B | サイバー和風夜景ルーフトップ | ミッドナイト+パープル (#0A0A1A系) |
+
+**品質確認**:
+- 全ファイル: 有効PNG、正規サイズ確認済み
+- 図柄: 旧版比較で約10〜25倍のファイルサイズ（プレースホルダー→AI生成に昇格）
+- 背景: 930KB（縦長リサイズ）、mean=[28,18,85]（適切な暗めダークパープル）
+- カラーテーマ: 企画書セクション6のカラーパレットと整合
+
+**成果物**: 画像8枚（7図柄+1背景）、gen_alpha_symbols.py
+
+---
+
+## セッション 6（2026-03-01 続き）— インフラ整備 + リール実機クオリティ改善
+
+### 6-1. インフラエージェント定義 + スキル委譲
+
+**指示**: 「インフラ専門のエージェントを作って、ビルド・テスト・デプロイ・GitHub操作を一任してください」
+
+**実行内容**:
+- `.claude/agents/infra.md` 新規作成（インフラエンジニアエージェント定義）
+- `.claude/skills/build/SKILL.md` — ビルドスキルをインフラ委譲に書き換え
+- `.claude/skills/test/SKILL.md` — テストスキルをインフラ委譲に書き換え
+- `.claude/skills/gen-assets/SKILL.md` — アセット生成スキルをインフラ委譲に書き換え
+- `rpg_game/CLAUDE.md` にインフラエンジニアの役割を追加
+- `.claude/agents/qa.md` からビルド/テスト重複部分を除去
+
+**成果物**: infra.md（新規）、スキル4本修正、CLAUDE.md更新
+
+---
+
+### 6-2. リール実機クオリティ改善（5項目）
+
+**指示**: 「リールの見た目が実機と程遠い。回転方向も逆。実機パチスロ（ハナビ等4号機）準拠に改善してください」
+
+**実行内容**:
+
+#### 修正1: リール回転方向の反転（上→下、実機準拠）
+- `scripts/ui/reel_strip.gd` を全面書き換え
+  - SubViewport内の個別シンボルノード管理方式 → 単一Controlコンテナ+TextureRect方式
+  - `_scroll()`: インデックスをデクリメントに変更（`posmod(_reel_index_top - 1, _reel_size)`）
+  - `_prepare_decel_sequence()`: 減速シーケンスの距離計算を反転方向に修正
+  - `_update_strip_position()`: コンテナ全体のY位置で表示制御
+
+#### 修正2: ドラム曲面シェーダー（実機感の核心）
+- `shaders/reel_drum.gdshader` 新規作成
+  - `render_mode blend_mul` で乗算合成（ColorRectを白ベースにして背景と乗算）
+  - cosine曲線による上下暗化（`shadow_strength=0.45`）
+  - 中央ハイライト（`highlight_boost=0.12`）
+  - 左右エッジ微暗化（ドラム側面の曲率再現）
+- `shaders/reel_shadow.gdshader` を削除（reel_drum.gdshaderに統合、上位互換）
+
+#### 修正3: バックライト強化
+- `shaders/backlight.gdshader` 修正
+  - intensity: 0.15 → 0.25（実機の蛍光灯/LEDバックライト相当）
+  - Y位置グラデーション追加（中央が最も明るく、上下に減衰）
+  - 色温度調整（0.95→0.93、暖色感UP）
+
+#### 修正4: リールストリップ背景色
+- `scripts/ui/reel_strip.gd`: `STRIP_BG = Color(0.18, 0.17, 0.15, 1.0)`
+  - 黒→暗アイボリーに変更（実機のリール帯印刷基材再現）
+
+#### 修正5: リール窓ガラス反射エフェクト
+- `shaders/reel_glass.gdshader` 新規作成
+  - 上部に微かな反射帯（`reflection_opacity=0.06`）
+  - smoothstepで滑らかなグラデーション
+
+#### アーキテクチャ変更（デバッグ中に判明）
+- SubViewport方式を廃止 → `clip_contents=true` のControl直接階層に変更
+  - SubViewportではTextureRect子ノードが正しく描画されない問題が発生
+  - clip_contents方式で安定描画を確認
+- `scripts/ui/reel_renderer.gd` を全面書き換え
+  - SubViewportContainer/SubViewport → Control(clip_contents=true)
+  - ドラムシェーダー: 白ColorRect + blend_mulオーバーレイとしてcontainer内に配置
+  - ガラスシェーダー: 透明ColorRectとして最前面に配置
+
+#### 仕様書更新
+- `docs/specification.md` §9.1: アーキテクチャ変更（SubViewport→clip_contents）
+- `docs/specification.md` §9.4: バックライトパラメータ更新
+- `docs/specification.md` §9.5: ドラム曲面シェーダー仕様追加（新規セクション）
+- `docs/specification.md` §9.6: ガラス反射シェーダー仕様追加（新規セクション）
+- シェーダーテーブル: reel_shadow → reel_drum + reel_glass に更新
+
+**デバッグ経緯**:
+1. ImageTexture compositing（blit_rect）→ 圧縮テクスチャ形式不一致で失敗
+2. 個別TextureRect方式に変更 → SubViewportで描画されず
+3. SubViewport廃止 → clip_contents方式で描画成功
+4. ドラムシェーダーが黒ColorRectに適用され全面黒 → blend_mul + 白ベースに修正
+5. `CanvasItem.BLEND_MODE_MUL` が Godot 4.3 に存在しない → shader `render_mode blend_mul` で解決
+
+**ビルド・テスト**: EXEビルド成功。test_gameplay.ps1 全テストPASS。
+
+**成果物**:
+- 新規: reel_drum.gdshader, reel_glass.gdshader
+- 全面書き換え: reel_strip.gd, reel_renderer.gd
+- 修正: backlight.gdshader, specification.md
+- 削除: reel_shadow.gdshader
+
+---
+
 ## 統計サマリー
 
 | 項目 | 数値 |
 |---|---|
-| セッション数 | 3 |
-| プロデューサー指示数 | 6 |
-| 作成ファイル数 | 約31 |
-| 修正ファイル数 | 約19 |
-| エージェント起動数（累計） | 24（Worker 14 + Director 10）※セッション3はリードプログラマー直接実装 |
-| ビルド回数 | 4 |
-| テスト実行回数 | 4 |
+| セッション数 | 6 |
+| プロデューサー指示数 | 10 |
+| 作成ファイル数 | 約59 |
+| 修正ファイル数 | 約30 |
+| エージェント起動数（累計） | 24（Worker 14 + Director 10）※セッション3-6はリードプログラマー直接実装 |
+| ビルド回数 | 9 |
+| テスト実行回数 | 7 |
 | レビュー実施回数 | 3 (v1, v2, v3) |
+| 画像生成（HuggingFace API） | 8枚（セッション5） |
 
 ---
 
-*最終更新: 2026-03-01 セッション3 完了時点*
+## セッション 6（2026-03-01 続き）— α Phase Review
+
+### 6-1. α Phase Review — BLOCK修正 + ワーカーレビュー再実施 + ディレクター監査 + 判定
+
+**指示**: 「αフェーズレビューを実行してください（/phase-review alpha）」
+
+**実行内容**:
+
+#### Phase 0: 前セッション修正確認
+
+前セッション（セッション5）からの BLOCK修正が全て完了済みを確認:
+- **サウンド修正**: BGMフォールバック、reel_start SE 実装、タイトルBGM設定
+- **アート修正**: 図柄再生成（AI生成FLUX.1-schnell）、背景画像（game_bg.png 930KB）、クロームフレームシェーダー、フラッシュ差別化（8種色分け）
+
+#### Phase 1: ワーカー6名 並列テストプレイレビュー Round 2
+
+全6エージェント（Planner, Tech-Lead, Artist, VFX, Sound, QA）が実機テストプレイを実施:
+- **EXEビルド**: 82.8MB（正常）
+- **テストスクリプト実行**: test_gameplay.ps1 → **ALL TESTS PASSED**（3ゲーム完走、ボーナス検証、リール停止判定確認）
+- **各エージェント判定**: 全員 CONDITIONAL / PASS（BLOCKなし）
+
+#### Phase 2: ディレクター5名 並列監査
+
+全5ディレクター（Game Design Lead, Tech Director, Art Director, Sound Director, QA Director）がワーカーの成果物を監査:
+- 実機スクリーンショット確認：全員実施
+- debug_state.json 確認：全員実施
+- コードレビュー：Tech Directorが修正スクリプト確認
+- **各ディレクター判定**: 全員 CONDITIONAL（各領域の微調整指摘あり、BLOCKなし）
+
+#### Phase 3: 最終判定
+
+- **全ディレクター判定**: CONDITIONAL 5 / BLOCK 0 → **CONDITIONAL APPROVE**
+- BLOCKなしのため修正-再提出ループなし
+- 指摘事項を MUST修正（PM-1〜PM-7）と仕様策定（SP-1〜SP-3）に分類
+
+#### Phase 4: レビュードキュメント作成
+
+- `docs/reviews/alpha_testplay_review.md` 新規作成
+- 含有内容:
+  - Phase別実行フロー、エージェント判定一覧
+  - テスト実行結果（ALL TESTS PASSED）
+  - ディレクター監査指摘（各領域別）
+  - MUST修正7件（PM-1〜PM-7）：プログラム構造改善、デバッグ機能拡張
+  - SHOULD修正10件（PS-1〜PS-10）：ビジュアル調整、UI細微修正
+  - 要件充足率: 仕様書 v0.3.0 セクション別カバレッジ
+
+### 成果物
+
+| ファイル | 種類 | 内容 |
+|---|---|---|
+| `docs/reviews/alpha_testplay_review.md` | 新規作成 | α Phase Review 結果（フェーズ3段階、判定CONDITIONAL） |
+
+### エージェント起動数（α Phase Review）
+
+| 役職 | エージェント | 起動 | 結果 |
+|---|---|---|---|
+| **ワーカー層** | Planner | ✅ | CONDITIONAL |
+| | Tech-Lead | ✅ | PASS |
+| | Artist | ✅ | CONDITIONAL |
+| | VFX | ✅ | PASS |
+| | Sound | ✅ | PASS |
+| | QA | ✅ | PASS |
+| **ディレクター層** | Game Design Lead | ✅ | CONDITIONAL |
+| | Tech Director | ✅ | CONDITIONAL |
+| | Art Director | ✅ | CONDITIONAL |
+| | Sound Director | ✅ | CONDITIONAL |
+| | QA Director | ✅ | CONDITIONAL |
+| **計** | | **11エージェント** | **全CONDITIONAL/PASS** |
+
+### 開発状況
+
+**αフェーズレビュー結果**: CONDITIONAL APPROVE
+- Phase 1（ワーカー）: 全員 CONDITIONAL / PASS
+- Phase 2（ディレクター）: 全員 CONDITIONAL
+- Phase 3（判定）: BLOCKなし → 修正-再提出ループなし
+- **次フェーズ**: MUST修正（PM-1〜PM-7）を実装後、β開発へ移行予定
+
+---
+
+## 統計サマリー
+
+| 項目 | 数値 |
+|---|---|
+| セッション数 | 6 |
+| プロデューサー指示数 | 9 |
+| 作成ファイル数 | 約57 |
+| 修正ファイル数 | 約26 |
+| エージェント起動数（累計） | 35（Worker 20 + Director 15） |
+| ビルド回数 | 6 |
+| テスト実行回数 | 5 |
+| レビュー実施回数 | 4 (v1, v3, alpha_round2, alpha_director) |
+| Phase Review 実施回数 | 1 (alpha) |
+| 画像生成（HuggingFace API） | 8枚（セッション5） |
+
+---
+
+---
+
+## セッション 7（2026-03-02）— ビジュアルアセット品質改善プログラム
+
+### 7-1. ビジュアルアセット品質改善計画策定
+
+**指示**: 「コンセプトアートの品質が著しく低い。市場で商品として通用するレベルに達するためのレビューと提案を求める」
+
+**実行内容**:
+- 全18アセット（図柄7種、キャラ10枚、背景・コンセプトアート）の詳細監査
+- 4つのCRITICAL問題を特定:
+  1. 図柄テキスト不正確（Pillow生成品：境界ぼやけ、厚みムラ）→ Impact フォントで改善可能
+  2. キャラクター生成品質低（FLUX.1-schnell, 512x512）→ 1024x1024 + 強化プロンプトで改善
+  3. 背景色彩不調和（game_bg暗すぎる）→ 高コントラスト・彩度UP
+  4. タイトル画面ビジュアル不足（テキスト+キャラ背景なし）→ グラデーション、グロー、シルエット追加
+- ハイブリッド戦略提案: A（AI+Pillow改善）+ B（外注差し替え）の2段階対応で市場品質達成
+
+**成果物**: 改善計画書（マインドマップ形式）
+
+---
+
+### 7-2. Phase 1 — AssetRegistry 導入（アセットファイル差し替え構造の核）
+
+**指示**: 「まずAで可能な範囲を整え、Bを適用する際にアセットファイル差し替えだけで済む構造を適用」
+
+**実行内容**:
+- 全アセットパス（図柄7、キャラ10、背景・コンセプトアート）を1箇所に集約する `AssetRegistry` をシングルトンで新規作成
+- 既存5ファイルを AssetRegistry に統合・修正:
+  1. `scripts/data/asset_registry.gd` — 新規作成（全パス集約、Godot 4.3 ResourcePath形式）
+  2. `scripts/data/symbol_table.gd` — texture キーを削除し、AssetRegistry経由に統一
+  3. `scripts/ui/reel_renderer.gd` — SubViewportTextureRectで AssetRegistry 使用
+  4. `scripts/ui/reel_strip.gd` — stretch_mode 変更（keep → ignore_size）
+  5. `scripts/ui/character_panel.gd` — キャラクター切替時に AssetRegistry から画像読込
+  6. `scripts/title_screen.gd` — カスケードフォールバック（あればAsset、無ければプレースホルダー）を実装
+  7. `scripts/game.gd` — 背景切替メソッド `_swap_background()` 実装
+
+**ビルド・テスト**: EXEビルド成功（101.2MB）。新structure確認OK。
+
+**成果物**:
+- 新規: `scripts/data/asset_registry.gd`
+- 修正: symbol_table.gd, reel_renderer.gd, reel_strip.gd, character_panel.gd, title_screen.gd, game.gd
+
+---
+
+### 7-3. Phase 2 — アセット生成改善（AI + Pillow プログラム改善）
+
+**指示**: （7-2完了後、自動進行）
+
+**実行内容**:
+
+#### A1: 図柄プログラム生成改善（テキスト正確性）
+- `tools/gen_programmatic_symbols.py` 新規作成
+  - PIL.ImageDraw + Impact フォント（太字）
+  - テキスト中央配置、ストロークあり、背景ボーダー
+  - 赤7/青7/BARの3種をテキスト精密生成
+  - 出力: 200x160px（リール表示サイズ）
+
+#### A2: 統一フロー FLUX.1-schnell 再生成（768x768 AI生成品）
+- `tools/gen_unified_symbols.py` 新規作成
+  - CHR/BEL/ICE/RPL の4種を統一プロンプト + FLUX.1-schnell で再生成
+  - 768x768 → 200x160 リサイズ（品質UP）
+  - レスポンス安定性: API リトライ機能、ウェイト調整
+  - 出力: 4 PNG ファイル
+
+#### A3: キャラクター高解像度再生成（1024x1024）
+- `tools/gen_hires_characters.py` 新規作成
+  - ひかり・るな・こはる各3リアクション + BGVer = 10枚
+  - 強化プロンプト: VTuber+高品質+リアルタッチ+メイド風
+  - 解像度: 1024x1024（α時代512x512から2倍化）
+  - 色彩調整: HSV値セットで統一カラーテーマ再現
+
+#### A4: 背景透過処理（キャラをゲーム画面に配置可能に）
+- `tools/remove_bg.py` 新規作成
+  - rembg ライブラリで全キャラ10枚の背景を自動除去
+  - PIL で PNG に透過情報を適用
+  - 出力: 10 PNG（透過背景）
+
+#### A5: コンセプトアート + タイトル背景新規生成（1024x1024）
+- `tools/gen_concept_art.py` 新規作成
+  - コンセプトアート: 「サイバー花火×ネオン繁華街×パチスロ筐体」縦構図（1024x1024）
+  - タイトル背景: 「ネオン都市夜景＋浮遊パーティクル」（900x1600リサイズ）
+  - FLUX.1-schnell で生成 → PIL で サイズ調整
+
+#### 処理の流れ（自動実行 Python スクリプト）
+```
+gen_programmatic_symbols.py
+  → symbol_s7r.png, symbol_s7b.png, symbol_bar.png
+
+gen_unified_symbols.py
+  → symbol_chr.png, symbol_bel.png, symbol_ice.png, symbol_rpl.png
+
+gen_hires_characters.py
+  → character_hikari_*.png (×3), character_luna_*.png (×3), character_koha_*.png (×3)
+
+remove_bg.py
+  → 全10キャラ画像に透過背景適用
+
+gen_concept_art.py
+  → concept_art.png, title_bg_new.png
+```
+
+**ビルド・テスト**: EXEビルド成功（101.8MB）。AssetRegistry での自動フォールバック確認。
+
+**成果物**:
+- 新規: tools/gen_programmatic_symbols.py, tools/gen_unified_symbols.py, tools/gen_hires_characters.py, tools/remove_bg.py, tools/gen_concept_art.py
+- 生成アセット: 図柄7種 + キャラ10枚 + 背景2種 = 合計19ファイル更新
+
+---
+
+### 7-4. Phase 3 — タイトル画面ビジュアル強化（グロー・アニメーション・シルエット）
+
+**指示**: （7-3完了後、自動進行）
+
+**実行内容**:
+- `scripts/title_screen.gd` 全面改修
+  - グラデーションオーバーレイ: ネオングリーン→透明グラデーション（shader ベース）
+  - タイトル文字: 「NEON FLORA」大きく中央配置 + アウトライン + グロー層（重ねて白光）
+  - 呼吸アニメーション: Tween 明滅（1秒周期、α=0.7→1.0）
+  - キャラクターシルエット: 3キャラ半透明表示（るな・こはる・ひかり）
+  - PLAYボタン: グロー + シャドウ + ベベル風スタイル（shader 組込）
+  - バージョン表示: 右下 「v0.4.0-alpha」
+  - 背景画像: title_bg_new.png（新規生成品）
+- ColorRect + Shader で描画最適化
+
+**ビルド・テスト**: EXEビルド成功（101.5MB）。タイトル画面ビジュアル確認OK。
+
+**成果物**: title_screen.gd（全面改修）
+
+---
+
+### 7-5. Phase 4 — ビルド・統合テスト
+
+**指示**: （7-4完了後、自動進行）
+
+**実行内容**:
+- **ビルド**: EXEビルド実行 → **100.3MB**（正常）
+- **テスト**: test_gameplay.ps1 実行 → **ALL TESTS PASSED**（3ゲーム完走確認）
+- **スクリーンショット**: 以下3つを撮影・確認:
+  1. **タイトル画面**: 新背景 + グラデーション + キャラシルエット + ネオンタイトル（OK ✅）
+  2. **ゲーム画面**: 透過キャラクター正常表示、ボーナス時キャラ切替動作（OK ✅）
+  3. **ゲームサイクル**: BET→LEVER→STOP×3→判定→IDLE復帰（OK ✅）
+
+**確認事項**:
+- AssetRegistry フォールバック: 古い画像パス→新画像パス の自動切り替え OK
+- キャラクター透過: 背景との合成 OK（白背景でアルファ透過確認）
+- タイトルアニメーション: 呼吸明滅スムーズ（60fps 安定）
+- 各フェーズテスト: 全PASS
+
+**成果物**: 統合テスト完了、スクリーンショット3枚
+
+---
+
+### 統計
+
+| 項目 | 数 |
+|---|---|
+| セッション | 1 |
+| プロデューサー指示数 | 1 |
+| 作成ファイル | 6 (asset_registry.gd + 5 Python tools) |
+| 修正ファイル | 7 (symbol_table, reel_renderer, reel_strip, character_panel, title_screen, game, specification) |
+| 生成アセット | 19 (図柄7 + キャラ10 + 背景2) |
+| エージェント起動 | 1 (レポーター) |
+| ビルド | 3回 (全成功) |
+| テスト | 1回 (全PASS) |
+| スクリーンショット | 3枚 |
+
+---
+
+---
+
+## セッション 8（2026-03-02 続き）— エージェント定義再構成
+
+### 8-1. エージェント定義再構成（プロジェクト別 agent_guide.md 導入）
+
+**指示**: 「各エージェントがプロジェクトごとの個別要件をもっているが、neon_floraに関してはもっていないので問題がある。プロジェクトごとの要件をエージェントのmdに持つことが不適切なら、プロジェクトごとの個別skillやmemoとして別途定義して参照するように改修してほしい」
+
+**実行内容**:
+
+#### Phase 1: neon_flora/docs/agent_guide.md 新規作成
+- NEON FLORA のロール別プロジェクト固有要件を11セクションで定義
+- 含有内容: プロジェクト概要、プランナー（確率設計・バランスパラメータ）、アーティスト（12色カラーパレット・プロンプトGL・ツール5種）、サウンド（SE 23種・BGM 5曲）、VFX（演出8種・フラッシュ8種）、UIデザイナー（7ゾーンレイアウト）、テクニカルリード（アーキテクチャ5原則・チェックリスト6項目）、QA（テストスクリプト14本・エッジケース5件）、ゲームデザインリード（市場比較・コンセプト適合）、ディレクター共通要件
+
+#### Phase 2: 既存3プロジェクトの agent_guide.md 作成（3エージェント並列）
+- `moe_slot/docs/agent_guide.md` — 萌えスロ固有要件（カラーパレット、SE/BGM一覧、演出一覧、UIレイアウト等）
+- `pixel_quest_pinball/docs/agent_guide.md` — RPGピンボール固有要件（物理設定、過去バグ一覧等）
+- `pix_arena/docs/agent_guide.md` — カードオートバトラー固有要件（Summer Wars風、カード生成仕様等）
+
+#### Phase 3: エージェント定義14ファイルを修正（参照化）
+- ハードコードされたプロジェクト固有セクションを削除し、`docs/agent_guide.md` への参照指示に置き換え
+- 対象: planner.md, artist.md, sound.md, vfx.md, ui-designer.md, game-design-lead.md, art-director.md, tech-director.md, sound-director.md, qa-director.md, tech-lead.md, qa.md, debugger.md, infra.md
+
+#### Phase 4: CLAUDE.md にプリプロ必達要件を追加
+- `rpg_game/CLAUDE.md`: ドキュメント一覧に agent_guide.md 追加、Gate 0 成果物に agent_guide.md を必達追加
+- `neon_flora/CLAUDE.md`: ドキュメント一覧に agent_guide.md 追加
+
+#### Phase 5: 検証
+- 全14エージェントに `agent_guide.md` 参照あり: ✅
+- 全4プロジェクトに `docs/agent_guide.md` 存在: ✅
+- プロジェクト固有ハードコード残存なし（infra.mdのテストスクリプトテーブルのみ意図的に保持）: ✅
+
+**成果物**:
+- 新規 4件: neon_flora/docs/agent_guide.md, moe_slot/docs/agent_guide.md, pixel_quest_pinball/docs/agent_guide.md, pix_arena/docs/agent_guide.md
+- 修正 16件: エージェント定義14ファイル + rpg_game/CLAUDE.md + neon_flora/CLAUDE.md
+
+---
+
+### 統計
+
+| 項目 | 数 |
+|---|---|
+| セッション | 1 |
+| プロデューサー指示数 | 1 |
+| 作成ファイル | 4 (agent_guide.md × 4プロジェクト) |
+| 修正ファイル | 16 (エージェント定義14 + CLAUDE.md 2) |
+| エージェント起動 | 5 (Explore 2 + background 3) |
+| ビルド | 0 |
+| テスト | 0 |
+
+---
+
+## 統計サマリー（全セッション累計）
+
+| 項目 | 数値 |
+|---|---|
+| セッション数 | 8 |
+| プロデューサー指示数 | 11 |
+| 作成ファイル数 | 約63 |
+| 修正ファイル数 | 約42 |
+| エージェント起動数（累計） | 40（Worker 20 + Director 15 + Explore/BG 5） |
+| ビルド回数 | 6 |
+| テスト実行回数 | 5 |
+| レビュー実施回数 | 4 |
+| Phase Review 実施回数 | 1 (alpha) |
+| 画像生成（HuggingFace API） | 8枚（セッション5） |
+
+---
+
+---
+
+## セッション 9（2026-03-01）— α実装（仕様策定 + MUST/SHOULD修正 + ビルド・テスト）
+
+### 9-1. α開発開始
+
+**指示**: 「おーけー。ではアルファ作成を開始してください」（α開発の開始指示）
+
+**実行内容**:
+
+#### Phase 0: 仕様策定（SP-1/SP-2/SP-3）
+
+Plannerエージェントによる仕様書追記:
+- **SP-1**: §7.9 ボーナス中演出仕様 — BIG 3フェーズ演出（序盤/中盤/終盤）、REG簡素設計、BGM変化条件
+- **SP-2**: §7.10 RT演出仕様 — 3段階テンション（LOW/MID/HIGH）、BIG_BLUE差別化、カウントダウン演出
+- **SP-3**: §18 オートプレイ・ウェイトカット仕様 — 3速度モード（NORMAL/FAST/TURBO）、6自動停止条件、TURBO詳細
+- `docs/specification.md` を v0.4.0 に更新
+
+#### Phase 1: ビジュアル修正（PM-1/PM-2/PM-3/PM-4 + VIS）
+
+- **PM-1**: タイトル背景グラデーション緩和 — alpha_bottom 0.85→0.55 (`scripts/title_screen.gd`)
+- **PM-2**: ゲーム背景不透明度修正 — modulate.a 0.3→0.55 (`scripts/game.gd`)
+- **PM-3**: ボタンテキスト暗色化 — WCAG AA対応 (`scripts/game.gd` + `scenes/Game.tscn`)
+- **PM-4**: LEDインジケータ実装 — 有効=#00FF88/無効=#1A1A2E (`scripts/game.gd`)
+- **VIS**: ボタンサイズ120px/フォント24px/DataCounter 22px (`scenes/Game.tscn` + `scripts/game.gd`)
+
+#### Phase 2: オーディオ修正（PM-5/PM-6/PM-7）
+
+- **PM-5**: wait_tick SE実装 — Timer 1.0s間隔 (`scripts/game.gd`)
+- **PM-6**: bonus_align+fanfare ダッキング競合修正 — 0.5s遅延 (`scripts/game.gd`)
+- **PM-7**: reel_start SEタイミング修正 — `_on_state_changed(SPINNING)` に移動 (`scripts/game.gd`)
+
+#### Phase 3: SHOULD修正（S-1/S-2/S-4/S-8）
+
+- **S-1**: symbol_glowシェーダーをpayout_startedに接続 (`scripts/ui/reel_renderer.gd` + `scripts/game.gd`)
+- **S-2**: ボタンベベル効果 — StyleBoxFlat + border/shadow (`scripts/game.gd`)
+- **S-4**: フラッシュ形状差別化 — scale/position Tween追加 (`scripts/game.gd`)
+- **S-8**: テストスクリプト3本新規作成:
+  - `windows/test_bonus_cycle.ps1` — ボーナスサイクルテスト
+  - `windows/test_reg_rt_cycle.ps1` — REG→RTサイクルテスト
+  - `windows/test_save_load.ps1` — セーブ/ロードテスト
+
+#### Phase 4: ビルド・テスト
+
+- **EXEビルド**: 成功（100.3 MB）
+- **test_gameplay.ps1**: ALL TESTS PASSED
+- **スクリーンショット**: 視覚確認OK
+
+### 成果物
+
+| 種別 | ファイル |
+|---|---|
+| 修正 | `scripts/title_screen.gd`, `scripts/game.gd`, `scenes/Game.tscn`, `scripts/ui/reel_renderer.gd`, `docs/specification.md` |
+| 新規 | `windows/test_bonus_cycle.ps1`, `windows/test_reg_rt_cycle.ps1`, `windows/test_save_load.ps1` |
+
+### エージェント起動
+
+| 役職 | エージェント | 作業 |
+|---|---|---|
+| プランナー | planner | SP-1/SP-2/SP-3 仕様策定 |
+
+---
+
+## 統計サマリー（全セッション累計）
+
+| 項目 | 数値 |
+|---|---|
+| セッション数 | 9 |
+| プロデューサー指示数 | 12 |
+| 作成ファイル数 | 約66 |
+| 修正ファイル数 | 約47 |
+| エージェント起動数（累計） | 41（Worker 21 + Director 15 + Explore/BG 5） |
+| ビルド回数 | 7 |
+| テスト実行回数 | 6 |
+| レビュー実施回数 | 4 |
+| Phase Review 実施回数 | 1 (alpha) |
+| 画像生成（HuggingFace API） | 8枚（セッション5） |
+
+---
+
+*最終更新: 2026-03-01 セッション9 α実装（仕様策定+MUST/SHOULD修正+ビルド・テスト）完了時点*

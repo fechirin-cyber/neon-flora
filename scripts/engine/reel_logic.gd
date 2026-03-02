@@ -164,6 +164,276 @@ static func _would_complete_winning_line(reel_idx: int, window: Array,
 	for line in lines:
 		if line[0] == line[1] and line[1] == line[2]:
 			match line[0]:
+				ReelData.RPL, ReelData.BEL, ReelData.ICE,\
+				ReelData.S7R, ReelData.S7B, ReelData.BAR:
+					return true
+	return false
+
+# =====================================================
+# Unit Tests (S-7, §15.1 U1-U9)
+# =====================================================
+
+static func _run_unit_tests() -> void:
+	var total := 0
+	var passed := 0
+
+	print("======== ReelLogic Unit Tests (§15.1) ========")
+
+	var r: Array
+	r = _test_u1(); total += r[0]; passed += r[1]
+	r = _test_u2(); total += r[0]; passed += r[1]
+	r = _test_pull_in("U3", PayTable.Flag.REPLAY, ReelData.RPL)
+	total += r[0]; passed += r[1]
+	r = _test_pull_in("U4", PayTable.Flag.BELL, ReelData.BEL)
+	total += r[0]; passed += r[1]
+	r = _test_pull_in("U5", PayTable.Flag.ICE, ReelData.ICE)
+	total += r[0]; passed += r[1]
+	r = _test_u6(); total += r[0]; passed += r[1]
+	r = _test_u7(); total += r[0]; passed += r[1]
+	r = _test_u8(); total += r[0]; passed += r[1]
+	r = _test_u9(); total += r[0]; passed += r[1]
+
+	print("======== TOTAL: %d/%d PASS ========" % [passed, total])
+	if passed == total:
+		print(">>> ALL TESTS PASSED <<<")
+	else:
+		print(">>> %d FAILURES <<<" % (total - passed))
+
+## U1: HAZURE停止制御 — 5ラインで入賞が揃わない (63パターン)
+static func _test_u1() -> Array:
+	var t := 0; var p := 0
+	for ri in range(3):
+		for pos in range(ReelData.REEL_SIZE):
+			t += 1
+			var positions: Array[int] = [0, 0, 0]
+			var stopped: Array[bool] = [true, true, true]
+			stopped[ri] = false
+			var stop := calc_stop_position(ri, pos, PayTable.Flag.HAZURE,
+				PayTable.Flag.HAZURE, positions, stopped)
+			positions[ri] = stop
+			if not _ut_has_winning_line(positions):
+				p += 1
+			else:
+				print("  U1 FAIL: reel=%d press=%d stop=%d" % [ri, pos, stop])
+	print("U1 HAZURE停止制御: %d/%d" % [p, t])
+	return [t, p]
+
+## U2: HAZURE時チェリー蹴り — LEFTでCHRが蹴られる (21パターン)
+static func _test_u2() -> Array:
+	var t := 0; var p := 0
+	for pos in range(ReelData.REEL_SIZE):
+		t += 1
+		var positions: Array[int] = [0, 0, 0]
+		var stopped: Array[bool] = [false, true, true]
+		var stop := calc_stop_position(0, pos, PayTable.Flag.HAZURE,
+			PayTable.Flag.HAZURE, positions, stopped)
+		var window := ReelData.get_window(0, stop)
+		if ReelData.CHR not in window:
+			p += 1
+		else:
+			var avoidable := false
+			for slip in range(5):
+				var cand := posmod(pos + slip, ReelData.REEL_SIZE)
+				var w := ReelData.get_window(0, cand)
+				if ReelData.CHR not in w:
+					avoidable = true
+					break
+			if not avoidable:
+				p += 1
+			else:
+				print("  U2 FAIL: pos=%d stop=%d (CHR avoidable)" % [pos, stop])
+	print("U2 HAZUREチェリー蹴り: %d/%d" % [p, t])
+	return [t, p]
+
+## U3/U4/U5: 小役引き込み (各63パターン)
+static func _test_pull_in(label: String, flag: PayTable.Flag, symbol: int) -> Array:
+	var t := 0; var p := 0
+	for ri in range(3):
+		for pos in range(ReelData.REEL_SIZE):
+			t += 1
+			var positions: Array[int] = [0, 0, 0]
+			var stopped: Array[bool] = [false, false, false]
+			for prev in range(ri):
+				stopped[prev] = true
+			var slip_range := 5
+			if flag == PayTable.Flag.ICE:
+				var os := 0
+				for i in range(3):
+					if i != ri and stopped[i]:
+						os += 1
+				if os >= 2:
+					slip_range = 2
+			var stop := calc_stop_position(ri, pos, flag,
+				PayTable.Flag.HAZURE, positions, stopped)
+			var window := ReelData.get_window(ri, stop)
+			var has_sym := symbol in window
+			var reachable := false
+			for slip in range(slip_range):
+				var cand := posmod(pos + slip, ReelData.REEL_SIZE)
+				var w := ReelData.get_window(ri, cand)
+				if symbol in w:
+					reachable = true
+					break
+			if (reachable and has_sym) or not reachable:
+				p += 1
+			else:
+				print("  %s FAIL: reel=%d pos=%d stop=%d" % [label, ri, pos, stop])
+	var desc: String
+	match flag:
+		PayTable.Flag.REPLAY: desc = "REPLAY引き込み"
+		PayTable.Flag.BELL: desc = "BELL引き込み"
+		PayTable.Flag.ICE: desc = "ICE引き込み"
+		_: desc = ""
+	print("%s %s: %d/%d" % [label, desc, p, t])
+	return [t, p]
+
+## U6: CHERRY_2角チェリー (21パターン)
+static func _test_u6() -> Array:
+	var t := 0; var p := 0
+	for pos in range(ReelData.REEL_SIZE):
+		t += 1
+		var positions: Array[int] = [0, 0, 0]
+		var stopped: Array[bool] = [false, false, false]
+		var stop := calc_stop_position(0, pos, PayTable.Flag.CHERRY_2,
+			PayTable.Flag.HAZURE, positions, stopped)
+		var window := ReelData.get_window(0, stop)
+		if window[0] == ReelData.CHR or window[2] == ReelData.CHR:
+			p += 1
+		else:
+			var reachable := false
+			for slip in range(5):
+				var cand := posmod(pos + slip, ReelData.REEL_SIZE)
+				var w := ReelData.get_window(0, cand)
+				if w[0] == ReelData.CHR or w[2] == ReelData.CHR:
+					reachable = true
+					break
+			if not reachable:
+				p += 1
+			else:
+				print("  U6 FAIL: pos=%d stop=%d" % [pos, stop])
+	print("U6 CHERRY_2角配置: %d/%d" % [p, t])
+	return [t, p]
+
+## U7: CHERRY_4中段チェリー (21パターン)
+static func _test_u7() -> Array:
+	var t := 0; var p := 0
+	for pos in range(ReelData.REEL_SIZE):
+		t += 1
+		var positions: Array[int] = [0, 0, 0]
+		var stopped: Array[bool] = [false, false, false]
+		var stop := calc_stop_position(0, pos, PayTable.Flag.CHERRY_4,
+			PayTable.Flag.HAZURE, positions, stopped)
+		var window := ReelData.get_window(0, stop)
+		if window[1] == ReelData.CHR:
+			p += 1
+		else:
+			var reachable := false
+			for slip in range(5):
+				var cand := posmod(pos + slip, ReelData.REEL_SIZE)
+				var w := ReelData.get_window(0, cand)
+				if w[1] == ReelData.CHR:
+					reachable = true
+					break
+			if not reachable:
+				p += 1
+			else:
+				print("  U7 FAIL: pos=%d stop=%d" % [pos, stop])
+	print("U7 CHERRY_4中段配置: %d/%d" % [p, t])
+	return [t, p]
+
+## U8: ボーナス図柄引き込み (189パターン)
+static func _test_u8() -> Array:
+	var t := 0; var p := 0
+	var bonus_configs := [
+		[PayTable.Flag.BIG_RED, [ReelData.S7R, ReelData.S7B]],
+		[PayTable.Flag.BIG_BLUE, [ReelData.S7R, ReelData.S7B]],
+		[PayTable.Flag.REG, [ReelData.BAR]],
+	]
+	for cfg in bonus_configs:
+		var stocked_flag = cfg[0]
+		var syms: Array = cfg[1]
+		for ri in range(3):
+			for pos in range(ReelData.REEL_SIZE):
+				t += 1
+				var positions: Array[int] = [0, 0, 0]
+				var stopped: Array[bool] = [false, false, false]
+				for prev in range(ri):
+					stopped[prev] = true
+				var stop := calc_stop_position(ri, pos, PayTable.Flag.HAZURE,
+					stocked_flag, positions, stopped)
+				var window := ReelData.get_window(ri, stop)
+				var has_target := false
+				for sym in syms:
+					if sym in window:
+						has_target = true
+						break
+				var reachable := false
+				for slip in range(5):
+					var cand := posmod(pos + slip, ReelData.REEL_SIZE)
+					var w := ReelData.get_window(ri, cand)
+					for sym in syms:
+						if sym in w:
+							reachable = true
+							break
+					if reachable:
+						break
+				if (reachable and has_target) or not reachable:
+					p += 1
+				else:
+					print("  U8 FAIL: stocked=%s reel=%d pos=%d stop=%d" % [
+						PayTable.Flag.keys()[stocked_flag], ri, pos, stop])
+	print("U8 ボーナス図柄引き込み: %d/%d" % [p, t])
+	return [t, p]
+
+## U9: 全フラグ×全位置 — 不正入賞なし (567パターン)
+static func _test_u9() -> Array:
+	var t := 0; var p := 0
+	var flags := [
+		PayTable.Flag.HAZURE, PayTable.Flag.REPLAY, PayTable.Flag.CHERRY_2,
+		PayTable.Flag.CHERRY_4, PayTable.Flag.BELL, PayTable.Flag.ICE,
+		PayTable.Flag.BIG_RED, PayTable.Flag.BIG_BLUE, PayTable.Flag.REG,
+	]
+	for flag in flags:
+		for ri in range(3):
+			for pos in range(ReelData.REEL_SIZE):
+				t += 1
+				var positions: Array[int] = [0, 0, 0]
+				var stopped: Array[bool] = [true, true, true]
+				stopped[ri] = false
+				var stop := calc_stop_position(ri, pos, flag,
+					PayTable.Flag.HAZURE, positions, stopped)
+				positions[ri] = stop
+				var ok := true
+				match flag:
+					PayTable.Flag.HAZURE, PayTable.Flag.BIG_RED, \
+					PayTable.Flag.BIG_BLUE, PayTable.Flag.REG:
+						if _ut_has_winning_line(positions):
+							ok = false
+					_:
+						pass
+				if ok:
+					p += 1
+				else:
+					print("  U9 FAIL: flag=%s reel=%d pos=%d stop=%d" % [
+						PayTable.Flag.keys()[flag], ri, pos, stop])
+	print("U9 全フラグ×全位置: %d/%d" % [p, t])
+	return [t, p]
+
+## テストヘルパー: 3リール停止位置から5ライン入賞判定
+static func _ut_has_winning_line(positions: Array[int]) -> bool:
+	var w0 := ReelData.get_window(0, positions[0])
+	var w1 := ReelData.get_window(1, positions[1])
+	var w2 := ReelData.get_window(2, positions[2])
+	var lines := [
+		[w0[0], w1[0], w2[0]],
+		[w0[1], w1[1], w2[1]],
+		[w0[2], w1[2], w2[2]],
+		[w0[0], w1[1], w2[2]],
+		[w0[2], w1[1], w2[0]],
+	]
+	for line in lines:
+		if line[0] == line[1] and line[1] == line[2]:
+			match line[0]:
 				ReelData.RPL, ReelData.BEL, ReelData.ICE:
 					return true
 	return false

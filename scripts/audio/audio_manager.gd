@@ -67,6 +67,9 @@ var _bgm_b: AudioStreamPlayer
 var _bgm_active: AudioStreamPlayer  # 現在再生中
 var _current_bgm: String = ""
 
+# S-3: BGMクロスフェード Tween kill管理
+var _bgm_crossfade_tween: Tween
+
 # --- ダッキング ---
 var _duck_tween: Tween
 var _bgm_bus_idx: int = -1
@@ -132,8 +135,8 @@ func _load_sound_generator() -> void:
 
 # --- 公開API ---
 
-## SE再生
-func play_se(se_name: String) -> void:
+## SE再生 (volume_db: 追加音量オフセット, 0.0=デフォルト)
+func play_se(se_name: String, volume_db: float = 0.0) -> void:
 	var stream := _get_se_stream(se_name)
 	if stream == null:
 		return
@@ -143,6 +146,7 @@ func play_se(se_name: String) -> void:
 		return
 
 	player.stream = stream
+	player.volume_db = volume_db
 	player.play()
 
 	# ダッキング判定
@@ -160,6 +164,10 @@ func play_bgm(bgm_name: String, fade_time: float = 0.5) -> void:
 
 	_current_bgm = bgm_name
 
+	# S-3: 既存クロスフェードTweenをkill
+	if _bgm_crossfade_tween and _bgm_crossfade_tween.is_valid():
+		_bgm_crossfade_tween.kill()
+
 	# クロスフェード: 現在のBGMをフェードアウト、新しい方をフェードイン
 	var new_player: AudioStreamPlayer
 	if _bgm_active == _bgm_a:
@@ -171,12 +179,12 @@ func play_bgm(bgm_name: String, fade_time: float = 0.5) -> void:
 	new_player.volume_db = -80.0
 	new_player.play()
 
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(_bgm_active, "volume_db", -80.0, fade_time)
-	tween.tween_property(new_player, "volume_db", 0.0, fade_time)
-	tween.set_parallel(false)
-	tween.tween_callback(_bgm_active.stop)
+	_bgm_crossfade_tween = create_tween()
+	_bgm_crossfade_tween.set_parallel(true)
+	_bgm_crossfade_tween.tween_property(_bgm_active, "volume_db", -80.0, fade_time)
+	_bgm_crossfade_tween.tween_property(new_player, "volume_db", 0.0, fade_time)
+	_bgm_crossfade_tween.set_parallel(false)
+	_bgm_crossfade_tween.tween_callback(_bgm_active.stop)
 
 	_bgm_active = new_player
 
@@ -185,9 +193,11 @@ func stop_bgm(fade_time: float = 0.5) -> void:
 	if not _bgm_active.playing:
 		return
 	_current_bgm = ""
-	var tween := create_tween()
-	tween.tween_property(_bgm_active, "volume_db", -80.0, fade_time)
-	tween.tween_callback(_bgm_active.stop)
+	if _bgm_crossfade_tween and _bgm_crossfade_tween.is_valid():
+		_bgm_crossfade_tween.kill()
+	_bgm_crossfade_tween = create_tween()
+	_bgm_crossfade_tween.tween_property(_bgm_active, "volume_db", -80.0, fade_time)
+	_bgm_crossfade_tween.tween_callback(_bgm_active.stop)
 
 ## ダッキング (BGM音量を一時的に下げる)
 func duck_bgm(target_db: float, attack_time: float) -> void:
@@ -267,6 +277,9 @@ func _get_bgm_stream(bgm_name: String) -> AudioStream:
 		var path: String = BGM_FILES[bgm_name]
 		if ResourceLoader.exists(path):
 			return load(path)
+	# プロシージャルBGMフォールバック (§10.8)
+	if _sound_gen and _sound_gen.has_method("generate_bgm"):
+		return _sound_gen.generate_bgm(bgm_name)
 	return null
 
 func _get_free_se_player() -> AudioStreamPlayer:

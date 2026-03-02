@@ -1,6 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
+[ext_resource type="Script" path="res://scripts/ui/reel_renderer.gd" id="2_reel"]
+[ext_resource type="Script" path="res://scripts/ui/character_panel.gd" id="3_char"]
 
 [node name="Game" type="Control"]
 layout_mode = 3
@@ -20,52 +22,149 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.039, 0.039, 0.118, 1)
 
-[node name="StateLabel" type="Label" parent="."]
+[node name="TopDecoration" type="ColorRect" parent="."]
 layout_mode = 1
-offset_left = 30.0
-offset_top = 40.0
-offset_right = 870.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 900.0
+offset_bottom = 120.0
+color = Color(0.059, 0.043, 0.157, 1)
+
+[node name="TopLabel" type="Label" parent="TopDecoration"]
+layout_mode = 1
+offset_left = 0.0
+offset_top = 30.0
+offset_right = 900.0
 offset_bottom = 90.0
-theme_override_font_sizes/font_size = 28
-theme_override_colors/font_color = Color(0.92, 0.92, 1.0, 1)
-text = "State: IDLE"
+theme_override_font_sizes/font_size = 32
+theme_override_colors/font_color = Color(0.0, 1.0, 0.53, 0.8)
+horizontal_alignment = 1
+text = "NEON FLORA"
 
-[node name="CreditLabel" type="Label" parent="."]
+[node name="CharacterArea" type="Control" parent="."]
 layout_mode = 1
-offset_left = 30.0
-offset_top = 110.0
-offset_right = 870.0
-offset_bottom = 170.0
-theme_override_font_sizes/font_size = 26
-theme_override_colors/font_color = Color(0.0, 1.0, 0.53, 1)
-text = "CREDIT: 50"
+offset_left = 0.0
+offset_top = 120.0
+offset_right = 900.0
+offset_bottom = 320.0
+script = ExtResource("3_char")
 
-[node name="ReelDisplay" type="Control" parent="."]
+[node name="ReelRenderer" type="Control" parent="."]
 layout_mode = 1
-offset_left = 30.0
-offset_top = 200.0
-offset_right = 870.0
-offset_bottom = 560.0
+offset_left = 0.0
+offset_top = 320.0
+offset_right = 900.0
+offset_bottom = 840.0
+script = ExtResource("2_reel")
 
-[node name="ReelLabel" type="Label" parent="."]
+[node name="SevenSegPanel" type="Control" parent="."]
 layout_mode = 1
-offset_left = 30.0
-offset_top = 570.0
-offset_right = 870.0
-offset_bottom = 650.0
-theme_override_font_sizes/font_size = 20
-theme_override_colors/font_color = Color(1.0, 0.843, 0.0, 1)
-text = ""
+offset_left = 0.0
+offset_top = 840.0
+offset_right = 900.0
+offset_bottom = 920.0
+
+[node name="SevenSegBg" type="ColorRect" parent="SevenSegPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.02, 0.02, 0.06, 1)
+
+[node name="ButtonPanel" type="HBoxContainer" parent="."]
+layout_mode = 1
+offset_left = 85.0
+offset_top = 960.0
+offset_right = 815.0
+offset_bottom = 1080.0
+alignment = 1
+theme_override_constants/separation = 10
+
+[node name="BetButton" type="Button" parent="ButtonPanel"]
+layout_mode = 2
+custom_minimum_size = Vector2(120, 120)
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.1, 0.08, 0.0, 1)
+theme_override_colors/font_disabled_color = Color(0.4, 0.4, 0.5, 1)
+text = "MAX
+BET"
+
+[node name="StopLButton" type="Button" parent="ButtonPanel"]
+layout_mode = 2
+custom_minimum_size = Vector2(150, 120)
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.06, 0.06, 0.12, 1)
+theme_override_colors/font_disabled_color = Color(0.4, 0.4, 0.5, 1)
+text = "STOP
+L"
+disabled = true
+
+[node name="StopCButton" type="Button" parent="ButtonPanel"]
+layout_mode = 2
+custom_minimum_size = Vector2(150, 120)
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.06, 0.06, 0.12, 1)
+theme_override_colors/font_disabled_color = Color(0.4, 0.4, 0.5, 1)
+text = "STOP
+C"
+disabled = true
+
+[node name="StopRButton" type="Button" parent="ButtonPanel"]
+layout_mode = 2
+custom_minimum_size = Vector2(150, 120)
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.06, 0.06, 0.12, 1)
+theme_override_colors/font_disabled_color = Color(0.4, 0.4, 0.5, 1)
+text = "STOP
+R"
+disabled = true
+
+[node name="LeverButton" type="Button" parent="ButtonPanel"]
+layout_mode = 2
+custom_minimum_size = Vector2(120, 120)
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.12, 0.06, 0.0, 1)
+theme_override_colors/font_disabled_color = Color(0.4, 0.4, 0.5, 1)
+text = "LEVER"
+disabled = true
+
+[node name="DataCounterPanel" type="Control" parent="."]
+layout_mode = 1
+offset_left = 0.0
+offset_top = 1120.0
+offset_right = 900.0
+offset_bottom = 1200.0
+
+[node name="BottomDecoration" type="ColorRect" parent="."]
+layout_mode = 1
+offset_left = 0.0
+offset_top = 1200.0
+offset_right = 900.0
+offset_bottom = 1320.0
+color = Color(0.059, 0.043, 0.157, 1)
 
 [node name="InfoLabel" type="Label" parent="."]
 layout_mode = 1
 offset_left = 30.0
-offset_top = 660.0
+offset_top = 1330.0
 offset_right = 870.0
-offset_bottom = 730.0
-theme_override_font_sizes/font_size = 24
+offset_bottom = 1380.0
+theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(1.0, 0.08, 0.58, 1)
 text = "Press [BET] then [LEVER]"
+
+[node name="DebugLabel" type="Label" parent="."]
+layout_mode = 1
+offset_left = 30.0
+offset_top = 1390.0
+offset_right = 870.0
+offset_bottom = 1500.0
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.35, 0.35, 0.45, 1)
+autowrap_mode = 3
+text = ""
 
 [node name="BlackoutOverlay" type="ColorRect" parent="."]
 layout_mode = 1
@@ -86,72 +185,3 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(1.0, 1.0, 1.0, 0.0)
 mouse_filter = 2
-
-[node name="ButtonPanel" type="HBoxContainer" parent="."]
-layout_mode = 1
-offset_left = 30.0
-offset_top = 750.0
-offset_right = 870.0
-offset_bottom = 870.0
-alignment = 1
-theme_override_constants/separation = 12
-
-[node name="BetButton" type="Button" parent="ButtonPanel"]
-layout_mode = 2
-custom_minimum_size = Vector2(80, 120)
-theme_override_font_sizes/font_size = 22
-theme_override_colors/font_color = Color(1.0, 1.0, 1.0, 1)
-theme_override_colors/font_disabled_color = Color(0.4, 0.4, 0.5, 1)
-text = "BET
-3枚"
-
-[node name="LeverButton" type="Button" parent="ButtonPanel"]
-layout_mode = 2
-custom_minimum_size = Vector2(100, 120)
-theme_override_font_sizes/font_size = 22
-theme_override_colors/font_color = Color(1.0, 1.0, 1.0, 1)
-theme_override_colors/font_disabled_color = Color(0.4, 0.4, 0.5, 1)
-text = "LEVER"
-disabled = true
-
-[node name="StopLButton" type="Button" parent="ButtonPanel"]
-layout_mode = 2
-custom_minimum_size = Vector2(150, 120)
-theme_override_font_sizes/font_size = 22
-theme_override_colors/font_color = Color(1.0, 1.0, 1.0, 1)
-theme_override_colors/font_disabled_color = Color(0.4, 0.4, 0.5, 1)
-text = "STOP
-L"
-disabled = true
-
-[node name="StopCButton" type="Button" parent="ButtonPanel"]
-layout_mode = 2
-custom_minimum_size = Vector2(150, 120)
-theme_override_font_sizes/font_size = 22
-theme_override_colors/font_color = Color(1.0, 1.0, 1.0, 1)
-theme_override_colors/font_disabled_color = Color(0.4, 0.4, 0.5, 1)
-text = "STOP
-C"
-disabled = true
-
-[node name="StopRButton" type="Button" parent="ButtonPanel"]
-layout_mode = 2
-custom_minimum_size = Vector2(150, 120)
-theme_override_font_sizes/font_size = 22
-theme_override_colors/font_color = Color(1.0, 1.0, 1.0, 1)
-theme_override_colors/font_disabled_color = Color(0.4, 0.4, 0.5, 1)
-text = "STOP
-R"
-disabled = true
-
-[node name="HelpLabel" type="Label" parent="."]
-layout_mode = 1
-offset_left = 30.0
-offset_top = 890.0
-offset_right = 870.0
-offset_bottom = 1050.0
-theme_override_font_sizes/font_size = 18
-theme_override_colors/font_color = Color(0.4, 0.4, 0.5, 1)
-autowrap_mode = 3
-text = "Keys: B=BET  SPACE=LEVER  Z/X/C=STOP L/C/R
-Debug: D=BIG  R=REG  T=+1000cr  P=dump state"
