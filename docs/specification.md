@@ -615,6 +615,18 @@ REG終了:
 
 ## 8. 画面仕様
 
+### 8.0 画面基本設定
+
+| 項目 | 値 | 備考 |
+|---|---|---|
+| Viewport | 900 x 1600 | 縦長ポートレート |
+| 画面の向き | **Portrait（縦画面固定）** | `display/window/handheld/orientation=1` |
+| Stretch Mode | canvas_items | UI自動スケーリング |
+| Stretch Aspect | expand | アスペクト比拡張 |
+| Android Orientation | Portrait (`screen/orientation=1`) | AndroidManifest に反映 |
+
+**画面の向きは全プラットフォームで縦画面（Portrait）固定とする。横画面への回転は許可しない。**
+
 ### 8.1 画面一覧
 
 | 画面 | シーン | 説明 |
