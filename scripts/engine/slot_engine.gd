@@ -66,12 +66,8 @@ func pull_lever() -> void:
 	if not _bonus.is_in_bonus():
 		GameData.total_games += 1
 		_bonus.last_bonus_between += 1
-		# RT消化
-		if _bonus.rt_active:
-			if _bonus.tick_rt():
-				rt_ended.emit()
 
-	# 内部抽選
+	# 内部抽選（RT消化前に実行 → 最終ゲームもRTテーブルで抽選される）
 	current_flag = _lottery()
 
 	# ボーナス成立チェック
@@ -96,9 +92,20 @@ func pull_lever() -> void:
 	reel_stopped = [false, false, false]
 	_stopped_count = 0
 
-	# 状態遷移
-	_change_state(GameState.SPINNING)
+	# シグナル発行順序（仕様1.4節準拠）:
+	# 1. flag_determined → 2. delay_fired → 3. tamaya_fired → 4. [0.4秒待機] → 5. SPINNING遷移
 	flag_determined.emit(current_flag, current_production)
+
+	var has_delay: bool = current_production.get("delay", false)
+	var has_tamaya: bool = current_production.get("tamaya", false)
+	if has_delay:
+		delay_fired.emit()
+	if has_tamaya:
+		tamaya_fired.emit()
+	if has_delay:
+		await get_tree().create_timer(0.4).timeout
+
+	_change_state(GameState.SPINNING)
 
 # === リール停止 ===
 func stop_reel(reel_idx: int, pressed_pos: int) -> void:
@@ -170,6 +177,11 @@ func _on_all_stopped() -> void:
 		_start_bonus()
 		return
 
+	# RT消化（全リール停止後に実行 — 抽選はRTテーブルで行われた後）
+	if not _bonus.is_in_bonus() and _bonus.rt_active:
+		if _bonus.tick_rt():
+			rt_ended.emit()
+
 	# ゲーム終了
 	_save_game()
 
@@ -197,7 +209,7 @@ func _lottery() -> PayTable.Flag:
 	return ProbabilityTable.lottery(table)
 
 func _lottery_small_role_only() -> PayTable.Flag:
-	var table := ProbabilityTable.get_normal_table(GameData.setting)
+	var table := ProbabilityTable.get_normal_table(GameData.setting).duplicate()
 	table.erase(PayTable.Flag.REG)
 	table.erase(PayTable.Flag.BIG_RED)
 	table.erase(PayTable.Flag.BIG_BLUE)
@@ -275,6 +287,17 @@ func _change_state(new_state: GameState) -> void:
 	game_state_changed.emit(new_state)
 
 func _save_game() -> void:
+	# ゲーム状態をGameDataにプッシュ（仕様書11.1節準拠）
+	GameData.saved_game_state = GameState.keys()[game_state]
+	GameData.bonus_stocked = _bonus.is_bonus_stocked()
+	GameData.bonus_stocked_type = PayTable.Flag.keys()[_bonus.bonus_flag_stocked] if _bonus.is_bonus_stocked() else ""
+	GameData.bonus_games_played = _bonus.bonus_games_played
+	GameData.bonus_games_max = _bonus.bonus_games_max
+	GameData.bonus_type_internal = PayTable.Flag.keys()[_bonus.bonus_type_internal] if _bonus.bonus_type_internal != PayTable.Flag.HAZURE else ""
+	GameData.rt_active = _bonus.rt_active
+	GameData.rt_remaining = _bonus.rt_remaining
+	GameData.rt_bonus_rate = _bonus.rt_bonus_rate
+	GameData.current_flag = current_flag
 	GameData.add_history_point()
 	GameData.save()
 

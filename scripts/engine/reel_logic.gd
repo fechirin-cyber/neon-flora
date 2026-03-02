@@ -41,14 +41,17 @@ static func is_valid_stop(reel_idx: int, window: Array, _pos: int,
 					return false
 			# ボーナスストック中: 揃え方向に引き込む
 			if try_bonus_align:
-				if not _can_align_bonus(reel_idx, window, bonus_flag_stocked):
+				if not _can_align_bonus(reel_idx, window, bonus_flag_stocked,
+						reel_positions, reel_stopped):
 					return false
 			# 5ライン全てで入賞図柄が揃わないこと
 			return not _would_complete_winning_line(reel_idx, window,
 				reel_positions, reel_stopped)
 
 		PayTable.Flag.REPLAY:
-			return center_symbol == ReelData.RPL
+			# 5ライン対応: いずれかのラインでRPLを揃える（中段優先は滑り順で実現）
+			return _can_align_symbol_on_line(reel_idx, window, ReelData.RPL,
+				reel_positions, reel_stopped)
 
 		PayTable.Flag.CHERRY_2:
 			if reel_idx == 0:
@@ -61,10 +64,14 @@ static func is_valid_stop(reel_idx: int, window: Array, _pos: int,
 			return true
 
 		PayTable.Flag.BELL:
-			return center_symbol == ReelData.BEL
+			# 5ライン対応: いずれかのラインでBELを揃える
+			return _can_align_symbol_on_line(reel_idx, window, ReelData.BEL,
+				reel_positions, reel_stopped)
 
 		PayTable.Flag.ICE:
-			return center_symbol == ReelData.ICE
+			# 5ライン対応: いずれかのラインでICEを揃える
+			return _can_align_symbol_on_line(reel_idx, window, ReelData.ICE,
+				reel_positions, reel_stopped)
 
 		PayTable.Flag.BIG_RED, PayTable.Flag.BIG_BLUE, PayTable.Flag.REG:
 			# ボーナスフラグ成立ゲームでは入賞を蹴る
@@ -73,16 +80,54 @@ static func is_valid_stop(reel_idx: int, window: Array, _pos: int,
 
 	return true
 
-## ボーナス揃え判定（統合7: 赤7/青7どちらでもBIG成立）
-static func _can_align_bonus(reel_idx: int, window: Array, bonus_flag: PayTable.Flag) -> bool:
+## ボーナス揃え判定（統合7: 赤7/青7どちらでもBIG成立、5ライン対応）
+static func _can_align_bonus(reel_idx: int, window: Array, bonus_flag: PayTable.Flag,
+		reel_positions: Array[int] = [], reel_stopped: Array[bool] = []) -> bool:
 	match bonus_flag:
 		PayTable.Flag.BIG_RED, PayTable.Flag.BIG_BLUE:
 			# 統合揃え: 赤7 or 青7 のどちらでもOK
-			return window[1] == ReelData.S7R or window[1] == ReelData.S7B
+			return (_can_align_symbol_on_line(reel_idx, window, ReelData.S7R,
+					reel_positions, reel_stopped) or
+				_can_align_symbol_on_line(reel_idx, window, ReelData.S7B,
+					reel_positions, reel_stopped))
 		PayTable.Flag.REG:
-			return window[1] == ReelData.BAR
+			return _can_align_symbol_on_line(reel_idx, window, ReelData.BAR,
+				reel_positions, reel_stopped)
 		_:
 			return true
+
+## 5ライン上でシンボルを揃えられる停止位置かチェック
+## 中段ライン優先は calc_stop_position の滑り順（0→4）で自然に実現される
+static func _can_align_symbol_on_line(reel_idx: int, window: Array, symbol: int,
+		reel_positions: Array[int], reel_stopped: Array[bool]) -> bool:
+	# 5ライン定義: 各リールの行インデックス [LEFT, CENTER, RIGHT]
+	var line_rows := [
+		[0, 0, 0],  # L1: 横上段
+		[1, 1, 1],  # L2: 横中段
+		[2, 2, 2],  # L3: 横下段
+		[0, 1, 2],  # L4: 斜め右下がり
+		[2, 1, 0],  # L5: 斜め右上がり
+	]
+
+	for line in line_rows:
+		var my_row: int = line[reel_idx]
+		if window[my_row] != symbol:
+			continue
+		# この行にターゲットシンボルがある → 他リールとの整合性チェック
+		var line_possible := true
+		for other_reel in range(3):
+			if other_reel == reel_idx:
+				continue
+			if not reel_stopped[other_reel]:
+				continue  # 未停止リールは制約なし
+			var other_window := ReelData.get_window(other_reel, reel_positions[other_reel])
+			var other_row: int = line[other_reel]
+			if other_window[other_row] != symbol:
+				line_possible = false
+				break
+		if line_possible:
+			return true
+	return false
 
 ## 5ライン全てで入賞図柄の3揃いが発生しないかチェック
 static func _would_complete_winning_line(reel_idx: int, window: Array,
