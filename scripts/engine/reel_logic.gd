@@ -49,28 +49,41 @@ static func is_valid_stop(reel_idx: int, window: Array, _pos: int,
 				reel_positions, reel_stopped)
 
 		PayTable.Flag.REPLAY:
-			# 5ライン対応: いずれかのラインでRPLを揃える（中段優先は滑り順で実現）
-			return _can_align_symbol_on_line(reel_idx, window, ReelData.RPL,
+			# 5ライン対応: RPLを揃えつつ、他の入賞役が同時に揃わないこと
+			if not _can_align_symbol_on_line(reel_idx, window, ReelData.RPL,
+					reel_positions, reel_stopped):
+				return false
+			return not _would_complete_unwanted_line(reel_idx, window, ReelData.RPL,
 				reel_positions, reel_stopped)
 
 		PayTable.Flag.CHERRY_2:
 			if reel_idx == 0:
 				return window[0] == ReelData.CHR or window[2] == ReelData.CHR
-			return true
+			# CENTER/RIGHT: 他の入賞役が揃わないこと
+			return not _would_complete_winning_line(reel_idx, window,
+				reel_positions, reel_stopped)
 
 		PayTable.Flag.CHERRY_4:
 			if reel_idx == 0:
 				return center_symbol == ReelData.CHR
-			return true
+			# CENTER/RIGHT: 他の入賞役が揃わないこと
+			return not _would_complete_winning_line(reel_idx, window,
+				reel_positions, reel_stopped)
 
 		PayTable.Flag.BELL:
-			# 5ライン対応: いずれかのラインでBELを揃える
-			return _can_align_symbol_on_line(reel_idx, window, ReelData.BEL,
+			# 5ライン対応: BELを揃えつつ、他の入賞役が同時に揃わないこと
+			if not _can_align_symbol_on_line(reel_idx, window, ReelData.BEL,
+					reel_positions, reel_stopped):
+				return false
+			return not _would_complete_unwanted_line(reel_idx, window, ReelData.BEL,
 				reel_positions, reel_stopped)
 
 		PayTable.Flag.ICE:
-			# 5ライン対応: いずれかのラインでICEを揃える
-			return _can_align_symbol_on_line(reel_idx, window, ReelData.ICE,
+			# 5ライン対応: ICEを揃えつつ、他の入賞役が同時に揃わないこと
+			if not _can_align_symbol_on_line(reel_idx, window, ReelData.ICE,
+					reel_positions, reel_stopped):
+				return false
+			return not _would_complete_unwanted_line(reel_idx, window, ReelData.ICE,
 				reel_positions, reel_stopped)
 
 		PayTable.Flag.BIG_RED, PayTable.Flag.BIG_BLUE, PayTable.Flag.REG:
@@ -127,6 +140,47 @@ static func _can_align_symbol_on_line(reel_idx: int, window: Array, symbol: int,
 				break
 		if line_possible:
 			return true
+	return false
+
+## 5ライン上で意図しない入賞役（allowed_symbol以外）が成立しないかチェック
+## 実機準拠: BELLフラグ時にBELは揃ってOKだが、ICEやRPLが同時に揃うのはNG
+static func _would_complete_unwanted_line(reel_idx: int, window: Array,
+		allowed_symbol: int, reel_positions: Array[int],
+		reel_stopped: Array[bool]) -> bool:
+	var other_stopped := 0
+	for i in range(3):
+		if i != reel_idx and reel_stopped[i]:
+			other_stopped += 1
+	if other_stopped < 2:
+		return false
+
+	var windows: Array = []
+	for i in range(3):
+		if i == reel_idx:
+			windows.append(window)
+		else:
+			windows.append(ReelData.get_window(i, reel_positions[i]))
+
+	var lw: Array = windows[0]
+	var cw: Array = windows[1]
+	var rw: Array = windows[2]
+
+	var lines := [
+		[lw[0], cw[0], rw[0]],
+		[lw[1], cw[1], rw[1]],
+		[lw[2], cw[2], rw[2]],
+		[lw[0], cw[1], rw[2]],
+		[lw[2], cw[1], rw[0]],
+	]
+
+	for line in lines:
+		if line[0] == line[1] and line[1] == line[2]:
+			if line[0] == allowed_symbol:
+				continue  # 意図した入賞 → OK
+			match line[0]:
+				ReelData.RPL, ReelData.BEL, ReelData.ICE,\
+				ReelData.S7R, ReelData.S7B, ReelData.BAR:
+					return true
 	return false
 
 ## 5ライン全てで入賞図柄の3揃いが発生しないかチェック
