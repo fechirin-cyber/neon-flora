@@ -12,22 +12,24 @@ const RPL = 6  # リプレイ
 
 const REEL_SIZE := 21
 
-# LEFT（3連BEL配置 pos2-4 — ハナビの3連どんちゃんに相当）
+# LEFT（3連BEL配置 pos1-3 — ハナビの3連どんちゃんに相当）
+# クロスアライメント最適化済: 異なる入賞役が同時に揃わない配置
+# BEL gap≤5, RPL gap≤5（4コマ滑りで常に到達可能）
 const LEFT: Array[int] = [
-	CHR, RPL, BEL, BEL, BEL, S7R, ICE, RPL, BEL, RPL,
-	S7B, BEL, CHR, RPL, BEL, ICE, BEL, BAR, RPL, BEL, BEL
+	CHR, BEL, BEL, BEL, RPL, BAR, BEL, BEL, RPL, CHR,
+	BEL, BEL, BEL, RPL, ICE, S7R, ICE, BEL, RPL, S7B, RPL
 ]
 
-# CENTER
+# CENTER（BEL/RPLがLEFTと異なる相対位置に配置 → 水平ライン干渉を防止）
 const CENTER: Array[int] = [
-	S7R, RPL, BEL, ICE, RPL, BEL, BEL, RPL, BEL, S7B,
-	ICE, RPL, BEL, BEL, RPL, ICE, BEL, BAR, RPL, BEL, BEL
+	RPL, BEL, BEL, BEL, S7R, RPL, RPL, BEL, S7B, ICE,
+	RPL, BEL, BEL, ICE, RPL, BAR, RPL, BEL, BEL, BEL, ICE
 ]
 
-# RIGHT
+# RIGHT（BEL-RPL交互配置で他リールとの位相差を最大化）
 const RIGHT: Array[int] = [
-	BEL, RPL, S7R, BEL, ICE, RPL, BEL, RPL, BEL, BEL,
-	BAR, RPL, ICE, BEL, RPL, S7B, BEL, ICE, RPL, BEL, BEL
+	BEL, RPL, BEL, ICE, S7R, ICE, RPL, BEL, ICE, BEL,
+	RPL, BEL, S7B, BEL, RPL, BEL, BAR, BEL, RPL, BEL, RPL
 ]
 
 static func get_reel(index: int) -> Array[int]:
