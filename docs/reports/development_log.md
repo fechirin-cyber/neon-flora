@@ -865,21 +865,96 @@ Plannerエージェントによる仕様書追記:
 
 ---
 
+---
+
+## セッション 10（2026-03-02）— αフェーズレビューv2 + GitHub更新 + APKリリース
+
+### 10-1. αフェーズレビュー再実行（BLOCK解消後）
+
+**指示**: 前セッションのQAディレクターBLOCK 4条件を解消後、フェーズレビューを再実行
+
+**実行内容**:
+
+#### Phase 1: ワーカー6名テストプレイレビュー（並列実行）
+
+| ワーカー | 判定 | 主な指摘 |
+|---|---|---|
+| プランナー | PASS | 全18セクション仕様策定完了 |
+| テクニカルリード | CONDITIONAL | payout_finished問題、_delay_pending設計、§7.9/§7.10未実装 |
+| UIデザイナー | CONDITIONAL | SETTINGSボタンサイズ不足、消灯全画面覆い、InfoLabel 22px |
+| サウンドデザイナー | 完了 | PM-5/6/7修正確認 |
+| アーティスト | CONDITIONAL | game_bg世界観不一致、るな/こはる仕様逸脱 |
+| VFXデザイナー | CONDITIONAL | §7.9/§7.10演出未実装、パーティクル未実装 |
+
+#### Phase 2: ディレクター5名監査（並列実行）
+
+| ディレクター | 判定 | 主な内容 |
+|---|---|---|
+| ゲームデザインリード | **APPROVE** | コンセプト適合PASS、市場品質PASS、ゲーム体験PASS |
+| テクニカルディレクター | **CONDITIONAL** | reel_start SE二重遅延(0.8s→0.4s修正必須) |
+| アートディレクター | **CONDITIONAL** | game_bg/るな/消灯範囲/SETTINGSボタン 4件MUST |
+| サウンドディレクター | **CONDITIONAL (alpha APPROVE可)** | PM-5/6/7全修正確認済、beta条件4件 |
+| QAディレクター | **APPROVE (Conditional)** | テスト5本全PASSED、beta入場条件2件 |
+
+**総合判定**: CONDITIONAL APPROVE (BLOCK 0件)
+
+**成果物**: `docs/reviews/alpha_testplay_review_v2.md`
+
+---
+
+### 10-2. GitHub統合 + セキュリティ修正 + APKリリース
+
+**指示**: 「レビュー結果とか含めて進捗をgithubに更新しておいて。apkもいったん今のアップよろしく」
+
+**実行内容**:
+- **セキュリティ修正**: tools/gen_*.py 4本からHuggingFace APIキーのハードコード値を除去→環境変数参照に統一
+- **コミット**: 88ファイル変更 (+6,585行) — コミット `e5c2b79`
+- **プッシュ**: `fechirin-cyber/neon-flora` main ブランチ
+- **APKビルド**: 66MB (Android debug) ビルド成功
+- **GitHubリリース**: `alpha-v0.4.0` (prerelease) — APK添付
+  - https://github.com/fechirin-cyber/neon-flora/releases/tag/alpha-v0.4.0
+
+**成果物**:
+- 修正: tools/gen_alpha_symbols.py, tools/gen_concept_art.py, tools/gen_hires_characters.py, tools/gen_unified_symbols.py
+- リリース: alpha-v0.4.0 (APK 66MB)
+
+---
+
+### エージェント起動
+
+| 役職 | エージェント | 作業 |
+|---|---|---|
+| プランナー | planner | テストプレイレビュー |
+| テクニカルリード | tech-lead | テストプレイレビュー |
+| UIデザイナー | ui-designer | テストプレイレビュー |
+| サウンドデザイナー | sound | テストプレイレビュー |
+| アーティスト | artist | テストプレイレビュー |
+| VFXデザイナー | vfx | テストプレイレビュー |
+| ゲームデザインリード | game-design-lead | ディレクター監査 |
+| テクニカルディレクター | tech-director | ディレクター監査 |
+| アートディレクター | art-director | ディレクター監査 |
+| サウンドディレクター | sound-director | ディレクター監査 |
+| QAディレクター | qa-director | ディレクター監査 |
+| レポーター | general-purpose | 開発ログ更新 |
+
+---
+
 ## 統計サマリー（全セッション累計）
 
 | 項目 | 数値 |
 |---|---|
-| セッション数 | 9 |
-| プロデューサー指示数 | 12 |
-| 作成ファイル数 | 約66 |
-| 修正ファイル数 | 約47 |
-| エージェント起動数（累計） | 41（Worker 21 + Director 15 + Explore/BG 5） |
-| ビルド回数 | 7 |
-| テスト実行回数 | 6 |
-| レビュー実施回数 | 4 |
-| Phase Review 実施回数 | 1 (alpha) |
+| セッション数 | 10 |
+| プロデューサー指示数 | 14 |
+| 作成ファイル数 | 約67 |
+| 修正ファイル数 | 約51 |
+| エージェント起動数（累計） | 53（Worker 27 + Director 20 + Explore/BG 6） |
+| ビルド回数 | 9 (EXE 7 + APK 2) |
+| テスト実行回数 | 10 |
+| レビュー実施回数 | 5 |
+| Phase Review 実施回数 | 2 (alpha v1 + v2) |
 | 画像生成（HuggingFace API） | 8枚（セッション5） |
+| GitHubリリース | 1 (alpha-v0.4.0) |
 
 ---
 
-*最終更新: 2026-03-01 セッション9 α実装（仕様策定+MUST/SHOULD修正+ビルド・テスト）完了時点*
+*最終更新: 2026-03-02 セッション10 αフェーズレビューv2 + GitHub更新 + APKリリース完了時点*
