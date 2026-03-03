@@ -3,6 +3,7 @@ extends Control
 
 var _bet_done: bool = false
 var _delay_pending: bool = false
+var _stops_enabled: bool = false  # 実機準拠: 全リールフル回転到達後にSTOPボタン有効化
 var _blackout_tween: Tween
 var _flash_tween: Tween
 var _wait_tick_timer: Timer
@@ -66,6 +67,10 @@ func _ready() -> void:
 	SlotEngine.tamaya_fired.connect(_on_tamaya_fired)
 	SlotEngine.wait_started.connect(_on_wait_started)
 	SlotEngine.wait_ended.connect(_on_wait_ended)
+
+	# ReelRenderer の全リール加速完了シグナル（実機: フル回転後にSTOP有効）
+	if _reel_renderer.has_signal("all_reels_at_full_speed"):
+		_reel_renderer.all_reels_at_full_speed.connect(_on_all_reels_at_full_speed)
 
 	# ボタンシグナル接続
 	_bet_btn.pressed.connect(_do_bet)
@@ -214,6 +219,7 @@ func _do_lever() -> void:
 		return
 	_bet_done = false
 	_delay_pending = false
+	_stops_enabled = false  # リール加速完了まで STOP 無効
 	# Tween kill管理 (M-3)
 	if _blackout_tween and _blackout_tween.is_valid():
 		_blackout_tween.kill()
@@ -593,6 +599,11 @@ func _on_wait_ended() -> void:
 		_wait_tick_timer.queue_free()
 		_wait_tick_timer = null
 
+func _on_all_reels_at_full_speed() -> void:
+	## 実機準拠: 全リールがフル回転速度(80RPM)に到達 → STOPボタン有効化
+	_stops_enabled = true
+	_update_buttons()
+
 # --- Display ---
 func _update_display() -> void:
 	# 7セグ更新
@@ -636,9 +647,10 @@ func _update_buttons() -> void:
 		SlotEngine.GameState.SPINNING, SlotEngine.GameState.STOPPING:
 			_bet_btn.disabled = true
 			_lever_btn.disabled = true
-			_stop_l_btn.disabled = SlotEngine.reel_stopped[0]
-			_stop_c_btn.disabled = SlotEngine.reel_stopped[1]
-			_stop_r_btn.disabled = SlotEngine.reel_stopped[2]
+			# 実機準拠: 全リールフル回転到達前はSTOPボタン無効
+			_stop_l_btn.disabled = not _stops_enabled or SlotEngine.reel_stopped[0]
+			_stop_c_btn.disabled = not _stops_enabled or SlotEngine.reel_stopped[1]
+			_stop_r_btn.disabled = not _stops_enabled or SlotEngine.reel_stopped[2]
 		_:
 			_bet_btn.disabled = true
 			_lever_btn.disabled = true

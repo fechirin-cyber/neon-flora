@@ -12,11 +12,17 @@ const MARGIN_TOP := 16.0        # (520-488)/2
 var _drum_shader: Shader
 var _glass_shader: Shader
 var _glow_shader: Shader
+var _blur_shader: Shader
 
 var _reel_containers: Array[Control] = []
 var _reel_strips: Array = []  # ReelStrip instances
 var _textures: Dictionary = {}
 var _glow_overlays: Array[ColorRect] = []
+var _blur_materials: Array[ShaderMaterial] = []  # 各リールのブラーマテリアル
+
+# STOPボタン有効化制御（実機: 全リールフル回転到達後に有効）
+var _accel_done_count: int = 0
+signal all_reels_at_full_speed()  # game.gdがSTOPボタンを有効化するトリガー
 
 func _ready() -> void:
 	_load_shaders()
@@ -29,6 +35,8 @@ func _load_shaders() -> void:
 	_glass_shader = load("res://shaders/reel_glass.gdshader")
 	if ResourceLoader.exists("res://shaders/symbol_glow.gdshader"):
 		_glow_shader = load("res://shaders/symbol_glow.gdshader")
+	if ResourceLoader.exists("res://shaders/reel_blur.gdshader"):
+		_blur_shader = load("res://shaders/reel_blur.gdshader")
 
 func _load_textures() -> void:
 	for sym_id in AssetRegistry.SYMBOL_TEXTURES:
@@ -60,7 +68,17 @@ func _build_reels() -> void:
 		container.add_child(strip)
 		strip.setup(i, _textures)
 		strip.reel_stopped.connect(_on_strip_stopped)
+		strip.accel_done.connect(_on_strip_accel_done)
 		_reel_strips.append(strip)
+
+		# モーションブラー（実機の回転中残像を再現）
+		if _blur_shader:
+			var blur_mat := ShaderMaterial.new()
+			blur_mat.shader = _blur_shader
+			blur_mat.set_shader_parameter("blur_strength", 0.0)
+			_blur_materials.append(blur_mat)
+		else:
+			_blur_materials.append(null)
 
 		# ドラム曲面シェーダー（blend_mixで端の暗化を実現）
 		if _drum_shader:
@@ -106,8 +124,34 @@ func _connect_signals() -> void:
 
 func _on_state_changed(new_state: SlotEngine.GameState) -> void:
 	if new_state == SlotEngine.GameState.SPINNING:
+		_accel_done_count = 0
 		for strip in _reel_strips:
 			strip.start_spin()
+
+func _on_strip_accel_done(_reel_idx: int) -> void:
+	_accel_done_count += 1
+	if _accel_done_count >= 3:
+		all_reels_at_full_speed.emit()
+
+func _physics_process(_delta: float) -> void:
+	# モーションブラー強度をリール速度に連動
+	# NOTE: ブラー無効化中（プロデューサー指示）。再有効化時は strength 計算を復元
+	#var _blur_enabled := false  # true にするとブラー有効化
+	for i in range(_reel_strips.size()):
+		var mat: ShaderMaterial = _blur_materials[i] if i < _blur_materials.size() else null
+		if mat == null:
+			continue
+		var strip = _reel_strips[i]
+		#var strength: float = strip._current_speed / strip.MAX_SPEED
+		var strength: float = 0.0  # ブラー無効（微量かける場合は上行を復元）
+		mat.set_shader_parameter("blur_strength", strength)
+		if strip._strip_node and strip._strip_node.get_child_count() > 0:
+			var tex_rect: TextureRect = strip._strip_node.get_child(0) as TextureRect
+			if tex_rect == null:
+				continue
+			# ブラー無効中: マテリアル適用しない
+			if tex_rect.material == mat:
+				tex_rect.material = null
 
 func _on_reel_stop_calculated(reel_idx: int, target_pos: int, _window: Array) -> void:
 	if reel_idx >= 0 and reel_idx < _reel_strips.size():

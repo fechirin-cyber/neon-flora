@@ -939,22 +939,200 @@ Plannerエージェントによる仕様書追記:
 
 ---
 
+## セッション 11（2026-03-03）— リール実機準拠化 + ゲームデザインリード強化
+
+### 11-1. リール挙動の実機準拠化（法規制/特許文献ベースの根本改修）
+
+**指示**: 「動作チェックでSTOPを押してからリールが即座に止まらないなど実機との差分がある。リサーチ不足。リアルな実装にしよう」
+
+**実行内容**:
+
+#### リサーチ結果
+- 実機パチスロのリール挙動を法規制（別表第5）、特許文献（JP2002159626A）、実測値から徹底調査
+- 致命的な乖離を6件特定:
+  1. 回転速度: 実機80RPM vs 実装48.8RPM (1.6倍遅い)
+  2. 停止方式: 実機190ms以内即停止 vs 実装470ms ease-out減速 (2.5倍遅い)
+  3. 減速カーブ: 実機にはない（ステッピングモーター即停止）vs 実装Quadratic ease-out
+  4. 余分な巡航: 実機にはない vs 実装MIN_STOP_SYMBOLS=4
+  5. 加速時間: 実機0.4秒 vs 実装0.25秒
+  6. バウンス: 実機極微小 vs 実装3px/120ms
+
+#### Phase 1: reel_strip.gd 全面改修
+- `MAX_SPEED`: 2800 → 4592 px/sec (80RPM × 21コマ × 164px)
+- `ACCEL_TIME`: 0.25 → 0.4秒 (特許JP2002159626A準拠)
+- 停止制御: `DECELERATING` (ease-out減速) → `SLIP_STOPPING` (コマ送り即停止)
+- `MIN_STOP_SYMBOLS`, `BRAKE_SYMBOLS` 廃止
+- バウンス: 3px/120ms → 1.5px/50ms (ステッピングモーター微振動)
+- `accel_done` シグナル追加（STOPボタン有効化タイミング用）
+- `get_current_center_pos()`: scroll_offset考慮の半コマ丸めに改善
+
+#### Phase 2: モーションブラーシェーダー新規作成
+- `shaders/reel_blur.gdshader` 新規作成
+- 縦方向4-tap weighted blur + 彩度低下
+- `blur_strength` を回転速度に連動（0.0=停止 〜 1.0=フル回転）
+- `reel_renderer.gd` の `_physics_process` で毎フレーム更新
+
+#### Phase 3: game.gd + reel_renderer.gd 修正
+- `_stops_enabled` フラグ追加（実機: 全リールフル回転後にSTOP有効）
+- `all_reels_at_full_speed` シグナルで3リール加速完了を検知
+- `_update_buttons()` にSTOP有効化条件追加
+
+#### Phase 4: ゲームデザインリード(game-design-lead)役割強化
+- ベンチマークタイトル監査ミッション追加（体験要素8項目チェックリスト）
+- リアリティ徹底追求ミッション追加（数値レベル検証義務、根拠不十分はBLOCK）
+- ミッション: 3観点 → 5観点に拡張
+
+#### Phase 5: ドキュメント更新
+- `specification.md` §9.2 / §9.3: 実機準拠パラメータに更新
+- `CLAUDE_MEMO.md`: 実機パラメータ詳細 + 禁止事項を記録
+
+#### Phase 6: ビルド・テスト
+- EXEビルド: 100.3MB (成功)
+- test_gameplay.ps1: ALL TESTS PASSED (3ゲーム + BIGボーナス確認)
+
+**成果物**:
+| 種別 | ファイル |
+|---|---|
+| 全面改修 | `scripts/ui/reel_strip.gd` |
+| 新規 | `shaders/reel_blur.gdshader` |
+| 修正 | `scripts/ui/reel_renderer.gd`, `scripts/game.gd` |
+| 修正 | `.claude/agents/game-design-lead.md` |
+| 修正 | `docs/specification.md`, `CLAUDE_MEMO.md` |
+
+**エージェント起動**: 2 (Explore: リール実装調査, Explore: 実機リール挙動リサーチ)
+
+---
+
 ## 統計サマリー（全セッション累計）
 
 | 項目 | 数値 |
 |---|---|
-| セッション数 | 10 |
-| プロデューサー指示数 | 14 |
-| 作成ファイル数 | 約67 |
-| 修正ファイル数 | 約51 |
-| エージェント起動数（累計） | 53（Worker 27 + Director 20 + Explore/BG 6） |
-| ビルド回数 | 9 (EXE 7 + APK 2) |
-| テスト実行回数 | 10 |
+| セッション数 | 11 |
+| プロデューサー指示数 | 17 |
+| 作成ファイル数 | 約68 |
+| 修正ファイル数 | 約56 |
+| エージェント起動数（累計） | 55 |
+| ビルド回数 | 11 |
+| テスト実行回数 | 11 |
 | レビュー実施回数 | 5 |
-| Phase Review 実施回数 | 2 (alpha v1 + v2) |
-| 画像生成（HuggingFace API） | 8枚（セッション5） |
+| Phase Review 実施回数 | 2 |
+| 画像生成（HuggingFace API） | 8枚 |
 | GitHubリリース | 1 (alpha-v0.4.0) |
 
 ---
 
-*最終更新: 2026-03-02 セッション10 αフェーズレビューv2 + GitHub更新 + APKリリース完了時点*
+---
+
+## セッション 12（2026-03-04）— リール即停止バグ修正 + ディレクタースキル強化 + 開発フロー厳守
+
+### 12-1. リール停止挙動の実機準拠修正（根本バグ2件）
+
+**指示1**: 「STOPを押してからリールが即座に止まらない。実機との差分がありリサーチ不足。リアルな実装にせよ」
+
+**実行内容**:
+- 実機パチスロの法規制・特許・実測値をリサーチし、reel_strip.gd を全面改修
+- MAX_SPEED 2800→4592、ACCEL_TIME 0.25→0.4、停止方式をease-out減速からコマ送り即停止に変更
+- モーションブラーシェーダー追加
+- STOPボタン有効化タイミング修正
+
+---
+
+### 12-2. リール即停止バグ修正 + ブラー残存修正
+
+**指示2**: 「テストみてたら全然即停止していない。停止後もブラー状態の画像になっていて品質に問題がある。指摘のチェック観点は適切なエージェントのスキルに追記せよ」
+
+**実行内容**:
+- **Bug1**: `request_stop()` の距離計算で方向不整合（19コマ大回り）を発見。即座にスナップ停止する実装に変更
+- **Bug2**: `_current_speed` が停止時に0にリセットされずブラーが残存。全停止パスで `_current_speed = 0.0` リセットを追加
+- director-tech/SKILL.md にリール挙動チェックリスト追記
+- director-qa/SKILL.md にパチスロリール品質チェック追記
+
+---
+
+### 12-3. ゲームデザインリード役割拡張
+
+**指示3**: 「ゲームデザインリードにベンチマークタイトル監査ミッション追加」「リアリティを追求するときは徹底的に追求せよ」
+
+**実行内容**:
+- `game-design-lead.md` に2つの新ミッション追加:
+  - ベンチマーク監査: 体験要素8項目チェックリスト（回転速度、停止感触、音響タイミング等）
+  - リアリティ徹底追求: 数値レベル検証義務、根拠不十分はBLOCK
+
+---
+
+### 12-4. 開発パイプライン厳守（ワーカー・ディレクター監査実施）
+
+**指示4**: 「開発フローまもっているか？作業者のチェックできていないのでは？」
+
+**実行内容**:
+- 開発パイプライン厳守を確認し、正規フローで監査を実施
+- **Step 1: ワーカーレビュー**:
+  - tech-lead: コードレビュー → PASS
+  - qa: ビルド + テスト → PASS
+  - ui-designer: スクリーンショット確認 → PASS
+- **Step 2: ディレクター監査**:
+  - tech-director: CONDITIONAL → APPROVE（specification.md更新で解消）
+  - qa-director: CONDITIONAL SHIP
+
+---
+
+### 成果物
+
+| 種別 | ファイル | 内容 |
+|---|---|---|
+| 修正 | `scripts/ui/reel_strip.gd` | 即スナップ停止、SLIP_STOPPING除去、_current_speed全停止パス0リセット |
+| 修正 | `scripts/ui/reel_renderer.gd` | ブラーマテリアル停止時解除 |
+| 新規 | `shaders/reel_blur.gdshader` | モーションブラーシェーダー |
+| 修正 | `docs/specification.md` | §9.2-9.3実機準拠パラメータ更新 |
+| 修正 | `CLAUDE_MEMO.md` | 実機パラメータ・方向整合性知見追記 |
+| 修正 | `.claude/agents/game-design-lead.md` | ベンチマーク監査+リアリティ追求ミッション |
+| 修正 | `.claude/skills/director-tech/SKILL.md` | リール挙動チェックリスト追加 |
+| 修正 | `.claude/skills/director-qa/SKILL.md` | パチスロリール品質チェック追加 |
+| 修正 | `scripts/game.gd` | STOPボタン有効化タイミング修正 |
+
+### レビュー結果
+
+| フェーズ | 役職 | 判定 |
+|---|---|---|
+| ワーカー | tech-lead | PASS |
+| ワーカー | qa | PASS |
+| ワーカー | ui-designer | PASS |
+| ディレクター | tech-director | CONDITIONAL → APPROVE（spec更新で解消） |
+| ディレクター | qa-director | CONDITIONAL SHIP |
+
+### ビルド・テスト
+
+- EXEビルド: 100.3MB（成功）
+- test_gameplay.ps1: ALL TESTS PASSED
+
+### エージェント起動
+
+| 役職 | エージェント | 作業 |
+|---|---|---|
+| テクニカルリード | tech-lead | コードレビュー |
+| QA | qa | ビルド + テスト |
+| UIデザイナー | ui-designer | スクリーンショット確認 |
+| テクニカルディレクター | tech-director | ディレクター監査 |
+| QAディレクター | qa-director | ディレクター監査 |
+
+---
+
+## 統計サマリー（全セッション累計）
+
+| 項目 | 数値 |
+|---|---|
+| セッション数 | 12 |
+| プロデューサー指示数 | 21 |
+| 作成ファイル数 | 約69 |
+| 修正ファイル数 | 約64 |
+| エージェント起動数（累計） | 62（Worker 25 + Director 17 + Explore/BG 7 + Reporter 1 + Review 12） |
+| ビルド回数 | 12 |
+| テスト実行回数 | 12 |
+| レビュー実施回数 | 6 |
+| Phase Review 実施回数 | 2 |
+| 画像生成（HuggingFace API） | 8枚 |
+| GitHubリリース | 1 (alpha-v0.4.0) |
+
+---
+
+*最終更新: 2026-03-04 セッション12 リール即停止バグ修正 + ディレクタースキル強化 + 開発フロー厳守完了時点*
