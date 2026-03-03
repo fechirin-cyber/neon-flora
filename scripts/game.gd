@@ -101,6 +101,9 @@ func _ready() -> void:
 	# データカウンターセットアップ
 	_setup_data_counter()
 
+	# デバッグメニュー
+	_setup_debug_menu()
+
 	# S-5: 初期BGM再生
 	AudioManager.play_bgm("normal", 0.0)
 
@@ -664,3 +667,62 @@ func _update_leds() -> void:
 	for btn: Button in _led_rects:
 		var led: ColorRect = _led_rects[btn]
 		led.color = COLOR_LED_INACTIVE if btn.disabled else COLOR_LED_ACTIVE
+
+# --- デバッグメニュー ---
+func _setup_debug_menu() -> void:
+	var panel := HBoxContainer.new()
+	panel.name = "DebugPanel"
+	panel.position = Vector2(10.0, 4.0)
+	panel.add_theme_constant_override("separation", 6)
+	add_child(panel)
+
+	var btn_style := StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.2, 0.2, 0.3, 0.8)
+	btn_style.set_corner_radius_all(4)
+	btn_style.content_margin_left = 8
+	btn_style.content_margin_right = 8
+	btn_style.content_margin_top = 4
+	btn_style.content_margin_bottom = 4
+
+	var font_size := 16
+	var font_color := Color(0.0, 1.0, 0.53)
+
+	# +100 クレジット
+	var credit_btn := Button.new()
+	credit_btn.text = "+100"
+	credit_btn.add_theme_stylebox_override("normal", btn_style)
+	credit_btn.add_theme_stylebox_override("hover", btn_style)
+	credit_btn.add_theme_stylebox_override("pressed", btn_style)
+	credit_btn.add_theme_font_size_override("font_size", font_size)
+	credit_btn.add_theme_color_override("font_color", font_color)
+	credit_btn.pressed.connect(func() -> void:
+		SlotEngine.debug_add_credit(100)
+		_update_display()
+	)
+	panel.add_child(credit_btn)
+
+	# BIG強制
+	var big_btn := Button.new()
+	big_btn.text = "BIG"
+	big_btn.add_theme_stylebox_override("normal", btn_style)
+	big_btn.add_theme_stylebox_override("hover", btn_style)
+	big_btn.add_theme_stylebox_override("pressed", btn_style)
+	big_btn.add_theme_font_size_override("font_size", font_size)
+	big_btn.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	big_btn.pressed.connect(func() -> void:
+		SlotEngine.debug_start_bonus_now("BIG")
+	)
+	panel.add_child(big_btn)
+
+	# REG強制
+	var reg_btn := Button.new()
+	reg_btn.text = "REG"
+	reg_btn.add_theme_stylebox_override("normal", btn_style)
+	reg_btn.add_theme_stylebox_override("hover", btn_style)
+	reg_btn.add_theme_stylebox_override("pressed", btn_style)
+	reg_btn.add_theme_font_size_override("font_size", font_size)
+	reg_btn.add_theme_color_override("font_color", Color(0.3, 0.5, 1.0))
+	reg_btn.pressed.connect(func() -> void:
+		SlotEngine.debug_start_bonus_now("REG")
+	)
+	panel.add_child(reg_btn)
