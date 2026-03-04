@@ -10,6 +10,8 @@ const MAX_BONUS_HISTORY := 100
 # 統計
 var setting: int = 3
 var credit: int = 50
+var bgm_volume: float = 100.0  # 0-100%
+var se_volume: float = 100.0   # 0-100%
 var total_games: int = 0
 var big_count: int = 0
 var reg_count: int = 0
@@ -42,6 +44,8 @@ func save() -> void:
 		"version": 1,
 		"setting": setting,
 		"credit": credit,
+		"bgm_volume": bgm_volume,
+		"se_volume": se_volume,
 		"total_games": total_games,
 		"big_count": big_count,
 		"reg_count": reg_count,
@@ -104,6 +108,8 @@ func _load_from_path(path: String) -> void:
 func _apply_data(data: Dictionary) -> void:
 	setting = clampi(data.get("setting", 3), 1, 6)
 	credit = clampi(data.get("credit", 50), 0, MAX_CREDIT)
+	bgm_volume = clampf(data.get("bgm_volume", 100.0), 0.0, 100.0)
+	se_volume = clampf(data.get("se_volume", 100.0), 0.0, 100.0)
 	total_games = maxi(data.get("total_games", 0), 0)
 	big_count = maxi(data.get("big_count", 0), 0)
 	reg_count = maxi(data.get("reg_count", 0), 0)

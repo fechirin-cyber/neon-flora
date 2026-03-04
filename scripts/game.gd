@@ -8,6 +8,19 @@ var _blackout_tween: Tween
 var _flash_tween: Tween
 var _wait_tick_timer: Timer
 
+# === オートプレイ (§18) ===
+enum AutoSpeed { NORMAL, FAST, TURBO }
+var _auto_active: bool = false
+var _auto_speed: int = AutoSpeed.FAST
+var _auto_games_remaining: int = 0  # 0 = 無限
+var _auto_stop_on_bonus: bool = true
+var _auto_stop_on_rt: bool = false
+var _auto_stop_on_reach_me: bool = false
+var _auto_stop_on_loss: int = 0  # 0=OFF, else -100/-300/-500
+var _auto_start_balance: int = 0  # 収支チェック用
+var _auto_running_game: bool = false  # 1G実行中フラグ
+const AUTO_STOP_INTERVALS := [0.8, 0.3, 0.05]  # NORMAL, FAST, TURBO
+
 # ボタン色定数 (§8.4)
 const COLOR_BET_ACTIVE := Color(1.0, 0.843, 0.0)       # #FFD700 ゴールド
 const COLOR_LEVER_ACTIVE := Color(1.0, 0.702, 0.278)    # #FFB347 オレンジ
@@ -67,6 +80,8 @@ func _ready() -> void:
 	SlotEngine.tamaya_fired.connect(_on_tamaya_fired)
 	SlotEngine.wait_started.connect(_on_wait_started)
 	SlotEngine.wait_ended.connect(_on_wait_ended)
+	SlotEngine.bonus_phase_changed.connect(_on_bonus_phase_changed)
+	SlotEngine.rt_phase_changed.connect(_on_rt_phase_changed)
 
 	# ReelRenderer の全リール加速完了シグナル（実機: フル回転後にSTOP有効）
 	if _reel_renderer.has_signal("all_reels_at_full_speed"):
@@ -236,6 +251,10 @@ func _do_lever() -> void:
 
 func _do_stop(reel_idx: int) -> void:
 	var state := SlotEngine.game_state
+	# §18.2: WAITING中にSTOPボタン → ウェイトカット
+	if state == SlotEngine.GameState.WAITING:
+		SlotEngine.cut_wait()
+		return
 	if state != SlotEngine.GameState.SPINNING and state != SlotEngine.GameState.STOPPING:
 		return
 	# CRITICAL FIX: ReelStripから実際の中段表示位置を取得（ランダム値ではなく）
@@ -254,6 +273,9 @@ func _on_state_changed(new_state: SlotEngine.GameState) -> void:
 				func() -> void: AudioManager.play_se("reel_start"))
 		else:
 			AudioManager.play_se("reel_start")
+	# §18: ハズレ時(PAYING経由しない)のオートプレイ継続
+	if new_state == SlotEngine.GameState.IDLE and _auto_active and _auto_running_game:
+		_auto_on_game_finished()
 	_update_display()
 
 func _on_credit_changed(_new_credit: int) -> void:
@@ -316,10 +338,15 @@ func _on_payout_finished() -> void:
 	# S-1: 入賞グロー終了
 	_reel_renderer.set_payout_glow(false)
 	_update_display()
+	# §18: オートプレイ次ゲームへ
+	_auto_on_game_finished()
 
 func _on_bonus_triggered(bonus_type: String) -> void:
 	_info_label.text = "*** %s BONUS START! ***" % bonus_type
 	AudioManager.play_se("bonus_align")  # ボーナス図柄揃い音
+	# §7.9: REGはシアンオーバーレイ
+	if bonus_type == "REG":
+		_flash_overlay.color = Color(0.0, 0.83, 1.0, 0.08)
 	# PM-6: ファンファーレを0.5s遅延（bonus_alignのダッキング-12dBと競合回避）
 	get_tree().create_timer(0.5).timeout.connect(func() -> void:
 		if bonus_type == "BIG":
@@ -331,23 +358,74 @@ func _on_bonus_triggered(bonus_type: String) -> void:
 	)
 
 func _on_bonus_ended(bonus_type: String, total_payout: int) -> void:
-	_info_label.text = "%s END — Total: %d" % [bonus_type, total_payout]
+	_info_label.text = "%s END - Total: %d" % [bonus_type, total_payout]
 	AudioManager.play_se("bonus_end")
+	AudioManager.reset_bgm_playback_speed()
+	_flash_overlay.color.a = 0.0  # オーバーレイクリア
 	if bonus_type == "REG":
 		AudioManager.play_bgm("normal", 0.5)
 
 func _on_rt_started(max_games: int) -> void:
 	_info_label.text = "RT START (%dG)" % max_games
 	AudioManager.play_se("rt_start")
-	AudioManager.play_bgm("rt", 0.5)
+	# §7.10.2: BIG_BLUE後RTは差別化BGM+テンポ
+	if SlotEngine.is_rt_blue():
+		AudioManager.play_bgm("rt", 0.5)
+		AudioManager.set_bgm_playback_speed(1.08)  # テンポ+8%
+	else:
+		AudioManager.play_bgm("rt", 0.5)
 
 func _on_rt_ended() -> void:
 	_info_label.text = "RT END"
+	AudioManager.reset_bgm_playback_speed()
+	_flash_overlay.color.a = 0.0  # オーバーレイクリア
 	AudioManager.play_bgm("normal", 1.0)
+
+# === §7.9: ボーナスフェーズ変化演出 ===
+func _on_bonus_phase_changed(phase: BonusController.BonusPhase) -> void:
+	AudioManager.play_se("flash")  # phase_change SE代用
+	match phase:
+		BonusController.BonusPhase.OPENING:
+			AudioManager.set_bgm_playback_speed(1.0)
+		BonusController.BonusPhase.CLIMAX:
+			# §7.9.1: テンポ+10%、背景パープル→ゴールド遷移
+			AudioManager.set_bgm_playback_speed(1.10)
+			_flash_overlay.color = Color(0.8, 0.6, 0.0, 0.06)  # ゴールドグロー微
+		BonusController.BonusPhase.FINALE:
+			# §7.9.1: テンポ+20%、全画面ゴールドグロー
+			AudioManager.set_bgm_playback_speed(1.20)
+			_flash_overlay.color = Color(1.0, 0.85, 0.0, 0.12)  # ゴールドグロー強
+	# ボーナス残り3G告知
+	var remaining := SlotEngine.get_bonus_remaining()
+	if remaining <= 3 and remaining > 0:
+		_info_label.text = "BONUS LAST %dG!" % remaining
+
+# === §7.10: RTフェーズ変化演出 ===
+func _on_rt_phase_changed(phase: BonusController.RtPhase) -> void:
+	var is_blue := SlotEngine.is_rt_blue()
+	match phase:
+		BonusController.RtPhase.CALM:
+			AudioManager.set_bgm_playback_speed(1.08 if is_blue else 1.0)
+			_flash_overlay.color = Color(0.0, 0.83, 1.0, 0.04)  # シアンパルス微
+		BonusController.RtPhase.RISING:
+			# §7.10.1: テンポ+5%、シアンパルス強化
+			AudioManager.set_bgm_playback_speed(1.13 if is_blue else 1.05)
+			_flash_overlay.color = Color(0.0, 0.83, 1.0, 0.08)
+		BonusController.RtPhase.CLIMAX:
+			# §7.10.1: テンポ+15%、ゴールド+シアン
+			AudioManager.set_bgm_playback_speed(1.23 if is_blue else 1.15)
+			_flash_overlay.color = Color(0.5, 0.7, 1.0, 0.12)
+	# §7.10.3: カウントダウン演出
+	var rt_remain := SlotEngine.get_rt_remaining()
+	if rt_remain <= 5 and rt_remain > 0:
+		_info_label.text = "RT LAST %dG!" % rt_remain
 
 func _on_reach_me(pattern_name: String) -> void:
 	_info_label.text = "REACH ME: %s" % pattern_name
 	AudioManager.play_se("reach_me")
+	# §18.1.2 条件6: リーチ目出現時
+	if _auto_active and _auto_stop_on_reach_me:
+		_stop_autoplay("reach me")
 
 # --- ゲーム背景画像 ---
 var _bg_texture_rect: TextureRect
@@ -588,6 +666,10 @@ func _setup_led_indicators() -> void:
 
 # --- Wait Tick (PM-5: §10.1) ---
 func _on_wait_started(_duration: float) -> void:
+	# §18.2: オートプレイFAST/TURBO中はウェイト自動カット
+	if _auto_active and _auto_speed != AutoSpeed.NORMAL:
+		SlotEngine.cut_wait()
+		return
 	if _wait_tick_timer != null:
 		_wait_tick_timer.queue_free()
 	_wait_tick_timer = Timer.new()
@@ -606,6 +688,9 @@ func _on_all_reels_at_full_speed() -> void:
 	## 実機準拠: 全リールがフル回転速度(80RPM)に到達 → STOPボタン有効化
 	_stops_enabled = true
 	_update_buttons()
+	# §18: オートプレイ中は自動STOP開始
+	if _auto_active:
+		_auto_schedule_stops()
 
 # --- Display ---
 func _update_display() -> void:
@@ -654,6 +739,13 @@ func _update_buttons() -> void:
 			_stop_l_btn.disabled = not _stops_enabled or SlotEngine.reel_stopped[0]
 			_stop_c_btn.disabled = not _stops_enabled or SlotEngine.reel_stopped[1]
 			_stop_r_btn.disabled = not _stops_enabled or SlotEngine.reel_stopped[2]
+		SlotEngine.GameState.WAITING:
+			_bet_btn.disabled = true
+			_lever_btn.disabled = true
+			# §18.2: ウェイト中はSTOPボタンでウェイトカット可能
+			_stop_l_btn.disabled = false
+			_stop_c_btn.disabled = false
+			_stop_r_btn.disabled = false
 		_:
 			_bet_btn.disabled = true
 			_lever_btn.disabled = true
@@ -726,3 +818,136 @@ func _setup_debug_menu() -> void:
 		SlotEngine.debug_start_bonus_now("REG")
 	)
 	panel.add_child(reg_btn)
+
+	# AUTO ボタン
+	var auto_btn := Button.new()
+	auto_btn.name = "AutoBtn"
+	auto_btn.text = "AUTO"
+	auto_btn.add_theme_stylebox_override("normal", btn_style)
+	auto_btn.add_theme_stylebox_override("hover", btn_style)
+	auto_btn.add_theme_stylebox_override("pressed", btn_style)
+	auto_btn.add_theme_font_size_override("font_size", font_size)
+	auto_btn.add_theme_color_override("font_color", Color(1.0, 1.0, 0.3))
+	auto_btn.pressed.connect(_toggle_autoplay)
+	panel.add_child(auto_btn)
+
+# === オートプレイ制御 (§18) ===
+
+func _toggle_autoplay() -> void:
+	if _auto_active:
+		_stop_autoplay("manual")
+	else:
+		_start_autoplay()
+
+func _start_autoplay() -> void:
+	_auto_active = true
+	_auto_start_balance = GameData.total_out - GameData.total_in
+	_auto_games_remaining = 100  # デフォルト100G
+	_info_label.text = "AUTO START [%dG]" % _auto_games_remaining
+	# AUTO表示ボタン色更新
+	var auto_node = get_node_or_null("DebugPanel/AutoBtn")
+	if auto_node:
+		var active_style := StyleBoxFlat.new()
+		active_style.bg_color = Color(0.8, 0.8, 0.0, 0.9)
+		active_style.set_corner_radius_all(8)
+		active_style.content_margin_left = 18
+		active_style.content_margin_right = 18
+		active_style.content_margin_top = 12
+		active_style.content_margin_bottom = 12
+		auto_node.add_theme_stylebox_override("normal", active_style)
+		auto_node.add_theme_color_override("font_color", Color.BLACK)
+	_auto_next_step()
+
+func _stop_autoplay(reason: String) -> void:
+	_auto_active = false
+	_auto_running_game = false
+	_info_label.text = "AUTO STOP (%s)" % reason
+	# ボタン色を戻す
+	var auto_node = get_node_or_null("DebugPanel/AutoBtn")
+	if auto_node:
+		var normal_style := StyleBoxFlat.new()
+		normal_style.bg_color = Color(0.2, 0.2, 0.3, 0.8)
+		normal_style.set_corner_radius_all(8)
+		normal_style.content_margin_left = 18
+		normal_style.content_margin_right = 18
+		normal_style.content_margin_top = 12
+		normal_style.content_margin_bottom = 12
+		auto_node.add_theme_stylebox_override("normal", normal_style)
+		auto_node.add_theme_color_override("font_color", Color(1.0, 1.0, 0.3))
+
+func _auto_next_step() -> void:
+	if not _auto_active:
+		return
+
+	# 停止条件チェック (§18.1.2)
+	# 条件2: クレジット0
+	if GameData.credit < 3:
+		_stop_autoplay("credit 0")
+		return
+	# 条件3: ゲーム数消化
+	if _auto_games_remaining > 0:
+		_auto_games_remaining -= 1
+		if _auto_games_remaining <= 0:
+			_stop_autoplay("games done")
+			return
+	# 条件4: 収支チェック
+	if _auto_stop_on_loss > 0:
+		var current_balance := GameData.total_out - GameData.total_in
+		var diff := current_balance - _auto_start_balance
+		if diff <= -_auto_stop_on_loss:
+			_stop_autoplay("loss limit")
+			return
+
+	var state := SlotEngine.game_state
+	_auto_running_game = true
+
+	# BETフェーズ
+	if state in [SlotEngine.GameState.IDLE, SlotEngine.GameState.BONUS, SlotEngine.GameState.RT]:
+		if not _bet_done:
+			_do_bet()
+		# レバー
+		if _bet_done:
+			_do_lever()
+	# ゲーム数表示更新
+	if _auto_games_remaining > 0:
+		_info_label.text = "AUTO [%dG]" % _auto_games_remaining
+	else:
+		_info_label.text = "AUTO [INF]"
+
+func _auto_schedule_stops() -> void:
+	## 全リールフル回転到達後に呼ばれる。STOP間隔で順次停止。
+	if not _auto_active or not _auto_running_game:
+		return
+	var interval: float = AUTO_STOP_INTERVALS[_auto_speed]
+	for i in range(3):
+		get_tree().create_timer(interval * (i + 1)).timeout.connect(
+			_auto_try_stop.bind(i))
+
+func _auto_try_stop(reel_idx: int) -> void:
+	if not _auto_active:
+		return
+	if SlotEngine.reel_stopped[reel_idx]:
+		return
+	var state := SlotEngine.game_state
+	if state != SlotEngine.GameState.SPINNING and state != SlotEngine.GameState.STOPPING:
+		return
+	_do_stop(reel_idx)
+
+func _auto_on_game_finished() -> void:
+	## 1G完了後（payout_finished or ハズレ判定後）に呼ばれる
+	if not _auto_active:
+		return
+	_auto_running_game = false
+
+	# 条件1: ボーナス成立
+	if _auto_stop_on_bonus and SlotEngine.is_in_bonus():
+		_stop_autoplay("bonus")
+		return
+	# 条件5: RT突入
+	if _auto_stop_on_rt and SlotEngine.is_rt_active():
+		_stop_autoplay("RT")
+		return
+
+	# 次のゲームへ（少し待ってから）
+	var delay := 0.5 if _auto_speed != AutoSpeed.TURBO else 0.1
+	get_tree().create_timer(delay).timeout.connect(_auto_next_step)

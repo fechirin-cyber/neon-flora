@@ -20,6 +20,8 @@ signal wait_ended()
 signal delay_fired()
 signal tamaya_fired()
 signal reach_me_detected(pattern_name: String)
+signal bonus_phase_changed(phase: BonusController.BonusPhase)
+signal rt_phase_changed(phase: BonusController.RtPhase)
 
 # === 公開状態 ===
 var game_state: GameState = GameState.IDLE
@@ -37,6 +39,8 @@ var _wait_timer: WaitTimer = WaitTimer.new()
 
 # S-1: 再入防止フラグ
 var _lever_processing: bool = false
+# §18.2: ウェイトカット用
+var _wait_cut_requested: bool = false
 
 # === BET処理 ===
 func do_bet(amount: int = 3) -> bool:
@@ -59,11 +63,16 @@ func pull_lever() -> void:
 
 	# ウェイトチェック
 	var current_time := Time.get_ticks_msec() / 1000.0
+	_wait_cut_requested = false
 	if _wait_timer.is_waiting(current_time):
 		var remaining := _wait_timer.get_remaining(current_time)
 		_change_state(GameState.WAITING)
 		wait_started.emit(remaining)
-		await get_tree().create_timer(remaining).timeout
+		# ウェイトカット対応: 0.1秒刻みで残時間を消化、カットリクエストで即抜け
+		while remaining > 0.0 and not _wait_cut_requested:
+			var step := minf(remaining, 0.1)
+			await get_tree().create_timer(step).timeout
+			remaining -= step
 		wait_ended.emit()
 
 	_wait_timer.mark_lever_pulled(Time.get_ticks_msec() / 1000.0)
@@ -178,6 +187,9 @@ func _on_all_stopped() -> void:
 			payout_finished.emit()
 			_save_game()
 			return
+		# §7.9: ボーナスフェーズ変化チェック
+		if _bonus.update_bonus_phase():
+			bonus_phase_changed.emit(_bonus.bonus_phase)
 
 	# ボーナス図柄揃い判定（5ライン・統合7対応）
 	if _bonus.is_bonus_stocked() and _check_bonus_aligned(windows):
@@ -186,6 +198,9 @@ func _on_all_stopped() -> void:
 
 	# RT消化（全リール停止後に実行 — 抽選はRTテーブルで行われた後）
 	if not _bonus.is_in_bonus() and _bonus.rt_active:
+		# §7.10: RTフェーズ変化チェック
+		if _bonus.update_rt_phase():
+			rt_phase_changed.emit(_bonus.rt_phase)
 		if _bonus.tick_rt():
 			rt_ended.emit()
 
@@ -336,6 +351,22 @@ func get_last_bonus_between() -> int:
 func is_in_bonus() -> bool:
 	return _bonus.is_in_bonus()
 
+## §7.9: ボーナスフェーズ取得
+func get_bonus_phase() -> BonusController.BonusPhase:
+	return _bonus.bonus_phase
+
+## §7.10: RTフェーズ取得
+func get_rt_phase() -> BonusController.RtPhase:
+	return _bonus.rt_phase
+
+## §7.10: BIG_BLUE後RTかどうか
+func is_rt_blue() -> bool:
+	return _bonus.rt_is_blue
+
+## ボーナス内部フラグ取得
+func get_bonus_type_internal() -> PayTable.Flag:
+	return _bonus.bonus_type_internal
+
 # === 中断復帰 (S-2: §2.4, §11) ===
 func restore_from_save() -> void:
 	var state_str: String = GameData.saved_game_state
@@ -386,6 +417,11 @@ func change_setting(s: int) -> void:
 func debug_force_bonus(flag: PayTable.Flag) -> void:
 	if PayTable.is_bonus_flag(flag):
 		_bonus.stock_bonus(flag)
+
+## §18.2: ウェイトカット — WAITING中に呼び出すと即座にウェイト解除
+func cut_wait() -> void:
+	if game_state == GameState.WAITING:
+		_wait_cut_requested = true
 
 func debug_start_bonus_now(type: String) -> void:
 	if type == "BIG":

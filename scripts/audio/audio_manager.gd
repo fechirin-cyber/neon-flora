@@ -73,6 +73,7 @@ var _bgm_crossfade_tween: Tween
 # --- ダッキング ---
 var _duck_tween: Tween
 var _bgm_bus_idx: int = -1
+var _se_bus_idx: int = -1
 
 # --- プロシージャル生成 ---
 var _sound_gen: Node  # SoundGenerator
@@ -82,6 +83,8 @@ func _ready() -> void:
 	_create_se_pool()
 	_create_bgm_players()
 	_load_sound_generator()
+	# 保存された音量を適用
+	apply_saved_volumes()
 	# テスト時はマスター音量を最小（ミュートしない範囲で最小）
 	if OS.get_cmdline_args().has("--auto-test") or OS.get_cmdline_user_args().has("--auto-test"):
 		var master_idx := AudioServer.get_bus_index(BUS_MASTER)
@@ -105,6 +108,7 @@ func _setup_audio_buses() -> void:
 		AudioServer.set_bus_volume_db(idx, DEFAULT_SE_DB)
 
 	_bgm_bus_idx = AudioServer.get_bus_index(BUS_BGM)
+	_se_bus_idx = AudioServer.get_bus_index(BUS_SE)
 
 func _create_se_pool() -> void:
 	for i in range(SE_POOL_SIZE):
@@ -132,6 +136,42 @@ func _load_sound_generator() -> void:
 		_sound_gen = Node.new()
 		_sound_gen.set_script(script)
 		add_child(_sound_gen)
+
+# --- 音量制御API ---
+
+## BGM音量設定 (0-100%)
+func set_bgm_volume(percent: float) -> void:
+	percent = clampf(percent, 0.0, 100.0)
+	if _bgm_bus_idx >= 0:
+		var db := _percent_to_db(percent)
+		AudioServer.set_bus_volume_db(_bgm_bus_idx, db)
+
+## SE音量設定 (0-100%)
+func set_se_volume(percent: float) -> void:
+	percent = clampf(percent, 0.0, 100.0)
+	if _se_bus_idx >= 0:
+		var db := _percent_to_db(percent)
+		AudioServer.set_bus_volume_db(_se_bus_idx, db)
+
+## パーセントをdBに変換 (0%=-60dB, 100%=0dB)
+func _percent_to_db(percent: float) -> float:
+	if percent <= 0.0:
+		return -80.0
+	return linear_to_db(percent / 100.0)
+
+## 保存された音量を適用
+func apply_saved_volumes() -> void:
+	set_bgm_volume(GameData.bgm_volume)
+	set_se_volume(GameData.se_volume)
+
+## §7.9/7.10: BGM再生速度変更（テンポ変化）
+func set_bgm_playback_speed(factor: float) -> void:
+	if _bgm_active and _bgm_active.playing:
+		_bgm_active.pitch_scale = factor
+
+## BGM再生速度をリセット
+func reset_bgm_playback_speed() -> void:
+	set_bgm_playback_speed(1.0)
 
 # --- 公開API ---
 
