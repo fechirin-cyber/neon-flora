@@ -678,13 +678,13 @@ func _setup_debug_menu() -> void:
 
 	var btn_style := StyleBoxFlat.new()
 	btn_style.bg_color = Color(0.2, 0.2, 0.3, 0.8)
-	btn_style.set_corner_radius_all(4)
-	btn_style.content_margin_left = 8
-	btn_style.content_margin_right = 8
-	btn_style.content_margin_top = 4
-	btn_style.content_margin_bottom = 4
+	btn_style.set_corner_radius_all(8)
+	btn_style.content_margin_left = 18
+	btn_style.content_margin_right = 18
+	btn_style.content_margin_top = 12
+	btn_style.content_margin_bottom = 12
 
-	var font_size := 16
+	var font_size := 24
 	var font_color := Color(0.0, 1.0, 0.53)
 
 	# +100 クレジット
