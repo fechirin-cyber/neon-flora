@@ -19,9 +19,17 @@ var _stat_labels: Dictionary = {}  # key -> Label
 var _scroll: ScrollContainer
 var _confirm_overlay: Control  # 確認ダイアログ用
 
+# オートプレイ設定UI (§18)
+var _speed_buttons: Array[Button] = []
+var _stop_bonus_btn: Button
+var _stop_rt_btn: Button
+var _stop_reach_me_btn: Button
+var _games_buttons: Array[Button] = []
+
 func _ready() -> void:
 	_build_ui()
 	_update_setting_buttons()
+	_update_autoplay_ui()
 	_update_stats()
 
 func _build_ui() -> void:
@@ -64,7 +72,7 @@ func _build_ui() -> void:
 	for i in range(1, 7):
 		var btn := Button.new()
 		btn.text = str(i)
-		btn.custom_minimum_size = Vector2(110.0, 70.0)
+		btn.custom_minimum_size = Vector2(110.0, 90.0)
 		btn.add_theme_font_size_override("font_size", 28)
 		var idx := i
 		btn.pressed.connect(func() -> void: _on_setting_changed(idx))
@@ -90,6 +98,83 @@ func _build_ui() -> void:
 	_se_value_label.text = "%d%%" % int(GameData.se_volume)
 	_se_slider.value_changed.connect(_on_se_volume_changed)
 	container.add_child(se_row[2])
+
+	# --- §18 オートプレイ設定 ---
+	container.add_child(_make_section_label("AUTOPLAY"))
+	var auto_panel := _make_panel()
+	container.add_child(auto_panel)
+
+	var auto_vbox := VBoxContainer.new()
+	auto_vbox.add_theme_constant_override("separation", 12)
+	auto_panel.add_child(auto_vbox)
+
+	# 速度選択: NORMAL / FAST / TURBO
+	var speed_label := Label.new()
+	speed_label.text = "SPEED"
+	speed_label.add_theme_font_size_override("font_size", 24)
+	speed_label.add_theme_color_override("font_color", LABEL_COLOR)
+	auto_vbox.add_child(speed_label)
+
+	var speed_row := HBoxContainer.new()
+	speed_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	speed_row.add_theme_constant_override("separation", 12)
+	auto_vbox.add_child(speed_row)
+
+	var speed_names: Array[String] = ["NORMAL", "FAST", "TURBO"]
+	for i in range(3):
+		var btn := Button.new()
+		btn.text = speed_names[i]
+		btn.custom_minimum_size = Vector2(200.0, 90.0)
+		btn.add_theme_font_size_override("font_size", 24)
+		var idx := i
+		btn.pressed.connect(func() -> void: _on_auto_speed_changed(idx))
+		speed_row.add_child(btn)
+		_speed_buttons.append(btn)
+
+	# 停止条件トグル
+	auto_vbox.add_child(_make_spacer(4.0))
+	var stop_label := Label.new()
+	stop_label.text = "STOP CONDITIONS"
+	stop_label.add_theme_font_size_override("font_size", 24)
+	stop_label.add_theme_color_override("font_color", LABEL_COLOR)
+	auto_vbox.add_child(stop_label)
+
+	_stop_bonus_btn = _make_toggle_button("Bonus Hit: STOP")
+	_stop_bonus_btn.pressed.connect(_on_auto_stop_bonus_toggled)
+	auto_vbox.add_child(_stop_bonus_btn)
+
+	_stop_rt_btn = _make_toggle_button("RT Start: STOP")
+	_stop_rt_btn.pressed.connect(_on_auto_stop_rt_toggled)
+	auto_vbox.add_child(_stop_rt_btn)
+
+	_stop_reach_me_btn = _make_toggle_button("Reach Me: STOP")
+	_stop_reach_me_btn.pressed.connect(_on_auto_stop_reach_me_toggled)
+	auto_vbox.add_child(_stop_reach_me_btn)
+
+	# ゲーム数設定: 50 / 100 / 200 / 500 / INF
+	auto_vbox.add_child(_make_spacer(4.0))
+	var games_label := Label.new()
+	games_label.text = "GAMES"
+	games_label.add_theme_font_size_override("font_size", 24)
+	games_label.add_theme_color_override("font_color", LABEL_COLOR)
+	auto_vbox.add_child(games_label)
+
+	var games_row := HBoxContainer.new()
+	games_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	games_row.add_theme_constant_override("separation", 12)
+	auto_vbox.add_child(games_row)
+
+	var games_values: Array[int] = [50, 100, 200, 500, 0]
+	var games_labels: Array[String] = ["50", "100", "200", "500", "INF"]
+	for i in range(5):
+		var btn := Button.new()
+		btn.text = games_labels[i]
+		btn.custom_minimum_size = Vector2(150.0, 90.0)
+		btn.add_theme_font_size_override("font_size", 24)
+		var val := games_values[i]
+		btn.pressed.connect(func() -> void: _on_auto_games_changed(val))
+		games_row.add_child(btn)
+		_games_buttons.append(btn)
 
 	# --- §12.2 統計表示 ---
 	container.add_child(_make_section_label("STATISTICS"))
@@ -177,6 +262,23 @@ func _make_slider_row() -> Array:
 	grabber_style.content_margin_bottom = 12
 	slider.add_theme_stylebox_override("grabber_area", grabber_style)
 	slider.add_theme_stylebox_override("grabber_area_highlight", grabber_style)
+	# グラバー（つまみ）サイズ拡大（スマホタップ対応 40x40px以上）
+	var grabber_knob := StyleBoxFlat.new()
+	grabber_knob.bg_color = NEON_GREEN
+	grabber_knob.set_corner_radius_all(20)
+	grabber_knob.content_margin_left = 20
+	grabber_knob.content_margin_right = 20
+	grabber_knob.content_margin_top = 20
+	grabber_knob.content_margin_bottom = 20
+	var grabber_knob_hl := StyleBoxFlat.new()
+	grabber_knob_hl.bg_color = NEON_GREEN.lightened(0.2)
+	grabber_knob_hl.set_corner_radius_all(20)
+	grabber_knob_hl.content_margin_left = 20
+	grabber_knob_hl.content_margin_right = 20
+	grabber_knob_hl.content_margin_top = 20
+	grabber_knob_hl.content_margin_bottom = 20
+	slider.add_theme_stylebox_override("grabber", grabber_knob)
+	slider.add_theme_stylebox_override("grabber_highlight", grabber_knob_hl)
 	row.add_child(slider)
 
 	var value_lbl := Label.new()
@@ -224,7 +326,7 @@ func _make_stat_row(label_text: String) -> Array:
 func _make_button(text: String, color: Color, min_w: float) -> Button:
 	var btn := Button.new()
 	btn.text = text
-	btn.custom_minimum_size = Vector2(min_w, 70.0)
+	btn.custom_minimum_size = Vector2(min_w, 90.0)
 	btn.add_theme_font_size_override("font_size", 22)
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
@@ -299,6 +401,74 @@ func _update_stats() -> void:
 	_stat_labels["reg_prob"].text = ("1/%.1f" % (float(tg) / float(rc))) if rc > 0 else "---"
 	_stat_labels["diff_medals"].text = str(to_ - ti)
 	_stat_labels["payout_rate"].text = ("%.1f%%" % (float(to_) / float(ti) * 100.0)) if ti > 0 else "---"
+
+# --- オートプレイ設定ロジック (§18) ---
+
+func _make_toggle_button(text: String) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.custom_minimum_size = Vector2(600.0, 90.0)
+	btn.add_theme_font_size_override("font_size", 24)
+	# スタイルは _update_autoplay_ui で設定
+	return btn
+
+func _on_auto_speed_changed(speed: int) -> void:
+	GameData.auto_speed = speed
+	GameData.save()
+	_update_autoplay_ui()
+
+func _on_auto_stop_bonus_toggled() -> void:
+	GameData.auto_stop_on_bonus = not GameData.auto_stop_on_bonus
+	GameData.save()
+	_update_autoplay_ui()
+
+func _on_auto_stop_rt_toggled() -> void:
+	GameData.auto_stop_on_rt = not GameData.auto_stop_on_rt
+	GameData.save()
+	_update_autoplay_ui()
+
+func _on_auto_stop_reach_me_toggled() -> void:
+	GameData.auto_stop_on_reach_me = not GameData.auto_stop_on_reach_me
+	GameData.save()
+	_update_autoplay_ui()
+
+func _on_auto_games_changed(games: int) -> void:
+	GameData.auto_games = games
+	GameData.save()
+	_update_autoplay_ui()
+
+func _update_autoplay_ui() -> void:
+	# 速度ボタン
+	for i in range(_speed_buttons.size()):
+		var btn := _speed_buttons[i]
+		var is_active := i == GameData.auto_speed
+		_apply_toggle_style(btn, is_active)
+
+	# 停止条件トグル
+	_apply_toggle_style(_stop_bonus_btn, GameData.auto_stop_on_bonus)
+	_apply_toggle_style(_stop_rt_btn, GameData.auto_stop_on_rt)
+	_apply_toggle_style(_stop_reach_me_btn, GameData.auto_stop_on_reach_me)
+
+	# ゲーム数ボタン
+	var games_values: Array[int] = [50, 100, 200, 500, 0]
+	for i in range(_games_buttons.size()):
+		var btn := _games_buttons[i]
+		var is_active := games_values[i] == GameData.auto_games
+		_apply_toggle_style(btn, is_active)
+
+func _apply_toggle_style(btn: Button, is_active: bool) -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = ACTIVE_BTN_COLOR if is_active else INACTIVE_BTN_COLOR
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 8
+	style.content_margin_right = 8
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
+	btn.add_theme_stylebox_override("normal", style)
+	btn.add_theme_stylebox_override("hover", style)
+	btn.add_theme_stylebox_override("pressed", style)
+	btn.add_theme_color_override("font_color",
+		Color.BLACK if is_active else Color.WHITE)
 
 # --- 確認ダイアログ ---
 

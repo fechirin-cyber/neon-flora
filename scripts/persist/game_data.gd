@@ -23,6 +23,13 @@ var session_count: int = 0
 var total_play_time_sec: int = 0
 var achievements: Array = []
 
+# オートプレイ設定 (§18)
+var auto_speed: int = 1  # 0=NORMAL, 1=FAST, 2=TURBO
+var auto_stop_on_bonus: bool = true
+var auto_stop_on_rt: bool = false
+var auto_stop_on_reach_me: bool = false
+var auto_games: int = 100  # 50/100/200/500/0(無限)
+
 # ゲーム状態（中断復帰用）
 var saved_game_state: String = "IDLE"
 var bonus_stocked: bool = false
@@ -56,6 +63,12 @@ func save() -> void:
 		"session_count": session_count,
 		"total_play_time_sec": total_play_time_sec,
 		"achievements": achievements,
+		# オートプレイ設定 (§18)
+		"auto_speed": auto_speed,
+		"auto_stop_on_bonus": auto_stop_on_bonus,
+		"auto_stop_on_rt": auto_stop_on_rt,
+		"auto_stop_on_reach_me": auto_stop_on_reach_me,
+		"auto_games": auto_games,
 		# ゲーム状態（中断復帰用 — 仕様書11.1節準拠）
 		"game_state": saved_game_state,
 		"bonus_stocked": bonus_stocked,
@@ -127,6 +140,15 @@ func _apply_data(data: Dictionary) -> void:
 		bonus_history = bonus_history.slice(-MAX_BONUS_HISTORY)
 
 	achievements = data.get("achievements", [])
+
+	# オートプレイ設定復元 (§18)
+	auto_speed = clampi(data.get("auto_speed", 1), 0, 2)
+	auto_stop_on_bonus = data.get("auto_stop_on_bonus", true)
+	auto_stop_on_rt = data.get("auto_stop_on_rt", false)
+	auto_stop_on_reach_me = data.get("auto_stop_on_reach_me", false)
+	auto_games = data.get("auto_games", 100)
+	if auto_games not in [0, 50, 100, 200, 500]:
+		auto_games = 100  # 無効値 → デフォルト
 
 	# ゲーム状態復元（仕様書11.4節バリデーション準拠）
 	saved_game_state = data.get("game_state", "IDLE")

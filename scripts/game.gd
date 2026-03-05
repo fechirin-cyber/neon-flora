@@ -16,7 +16,6 @@ var _auto_games_remaining: int = 0  # 0 = 無限
 var _auto_stop_on_bonus: bool = true
 var _auto_stop_on_rt: bool = false
 var _auto_stop_on_reach_me: bool = false
-var _auto_stop_on_loss: int = 0  # 0=OFF, else -100/-300/-500
 var _auto_start_balance: int = 0  # 収支チェック用
 var _auto_running_game: bool = false  # 1G実行中フラグ
 const AUTO_STOP_INTERVALS := [0.8, 0.3, 0.05]  # NORMAL, FAST, TURBO
@@ -86,6 +85,8 @@ func _ready() -> void:
 	# ReelRenderer の全リール加速完了シグナル（実機: フル回転後にSTOP有効）
 	if _reel_renderer.has_signal("all_reels_at_full_speed"):
 		_reel_renderer.all_reels_at_full_speed.connect(_on_all_reels_at_full_speed)
+	else:
+		push_error("ReelRenderer missing signal 'all_reels_at_full_speed' - STOP buttons will not enable")
 
 	# ボタンシグナル接続
 	_bet_btn.pressed.connect(_do_bet)
@@ -118,6 +119,9 @@ func _ready() -> void:
 
 	# デバッグメニュー
 	_setup_debug_menu()
+
+	# AUTO ボタン（正式機能: デバッグパネルから独立）
+	_setup_auto_button()
 
 	# S-5: 初期BGM再生
 	AudioManager.play_bgm("normal", 0.0)
@@ -256,6 +260,9 @@ func _do_stop(reel_idx: int) -> void:
 		SlotEngine.cut_wait()
 		return
 	if state != SlotEngine.GameState.SPINNING and state != SlotEngine.GameState.STOPPING:
+		return
+	# 実機準拠: 全リールフル回転到達前はSTOPを受け付けない（キーボード入力も含む）
+	if not _stops_enabled:
 		return
 	# CRITICAL FIX: ReelStripから実際の中段表示位置を取得（ランダム値ではなく）
 	var strip = _reel_renderer.get_strip(reel_idx)
@@ -714,6 +721,9 @@ func _update_display() -> void:
 		var played := SlotEngine.get_bonus_games_played()
 		_info_label.text = "BONUS: %d/%dG PAY:%d" % [
 			played, played + remaining, SlotEngine.get_bonus_payout()]
+		# BUG-003: ボーナス残り3Gカウントダウン（毎ゲーム表示）
+		if remaining <= 3 and remaining > 0:
+			_info_label.text = "BONUS LAST %dG!" % remaining
 	if SlotEngine.is_rt_active():
 		_games_label.text += " | RT: %dG" % SlotEngine.get_rt_remaining()
 
@@ -819,17 +829,42 @@ func _setup_debug_menu() -> void:
 	)
 	panel.add_child(reg_btn)
 
-	# AUTO ボタン
+	# AUTO ボタンは _setup_auto_button() で独立配置（デバッグ機能ではないため分離）
+
+# --- AUTO ボタン（正式機能: デバッグパネルから独立） ---
+func _setup_auto_button() -> void:
 	var auto_btn := Button.new()
 	auto_btn.name = "AutoBtn"
 	auto_btn.text = "AUTO"
+	# ButtonPanel の下（Y=1080付近）に右寄りで配置
+	auto_btn.position = Vector2(720.0, 1084.0)
+	auto_btn.custom_minimum_size = Vector2(160.0, 90.0)
+	# S-2: ベベル効果付きStyleBox（他ボタンと統一）
+	var COLOR_AUTO_ACTIVE := Color(0.0, 0.831, 1.0)   # #00D4FF シアンブルー
+	var COLOR_AUTO_TEXT   := Color(0.0, 0.08, 0.12)   # 暗色テキスト（WCAG AA）
+	var btn_style := StyleBoxFlat.new()
+	btn_style.bg_color = COLOR_AUTO_ACTIVE
+	btn_style.set_corner_radius_all(6)
+	btn_style.border_width_top = 2
+	btn_style.border_color = COLOR_AUTO_ACTIVE.lightened(0.3)
+	btn_style.border_width_bottom = 3
+	btn_style.shadow_color = Color(0.0, 0.0, 0.0, 0.3)
+	btn_style.shadow_size = 4
+	var btn_hover := btn_style.duplicate()
+	btn_hover.bg_color = COLOR_AUTO_ACTIVE.lightened(0.15)
+	btn_hover.shadow_size = 6
+	var btn_pressed := btn_style.duplicate()
+	btn_pressed.bg_color = COLOR_AUTO_ACTIVE.darkened(0.2)
+	btn_pressed.border_width_top = 0
+	btn_pressed.border_width_bottom = 1
+	btn_pressed.shadow_size = 1
 	auto_btn.add_theme_stylebox_override("normal", btn_style)
-	auto_btn.add_theme_stylebox_override("hover", btn_style)
-	auto_btn.add_theme_stylebox_override("pressed", btn_style)
-	auto_btn.add_theme_font_size_override("font_size", font_size)
-	auto_btn.add_theme_color_override("font_color", Color(1.0, 1.0, 0.3))
+	auto_btn.add_theme_stylebox_override("hover", btn_hover)
+	auto_btn.add_theme_stylebox_override("pressed", btn_pressed)
+	auto_btn.add_theme_font_size_override("font_size", 24)
+	auto_btn.add_theme_color_override("font_color", COLOR_AUTO_TEXT)
 	auto_btn.pressed.connect(_toggle_autoplay)
-	panel.add_child(auto_btn)
+	add_child(auto_btn)
 
 # === オートプレイ制御 (§18) ===
 
@@ -841,19 +876,29 @@ func _toggle_autoplay() -> void:
 
 func _start_autoplay() -> void:
 	_auto_active = true
+	# §18: GameDataから設定を読み込む
+	_auto_speed = GameData.auto_speed
+	_auto_stop_on_bonus = GameData.auto_stop_on_bonus
+	_auto_stop_on_rt = GameData.auto_stop_on_rt
+	_auto_stop_on_reach_me = GameData.auto_stop_on_reach_me
+	_auto_games_remaining = GameData.auto_games  # 0=無限
 	_auto_start_balance = GameData.total_out - GameData.total_in
-	_auto_games_remaining = 100  # デフォルト100G
-	_info_label.text = "AUTO START [%dG]" % _auto_games_remaining
-	# AUTO表示ボタン色更新
-	var auto_node = get_node_or_null("DebugPanel/AutoBtn")
+	if _auto_games_remaining > 0:
+		_info_label.text = "AUTO START [%dG]" % _auto_games_remaining
+	else:
+		_info_label.text = "AUTO START [INF]"
+	# AUTO表示ボタン色更新（S-2: ベベルスタイル、アクティブ時はゴールド）
+	var auto_node = get_node_or_null("AutoBtn")
 	if auto_node:
+		var COLOR_AUTO_ON := Color(1.0, 0.843, 0.0)   # ゴールド（AUTO ON）
 		var active_style := StyleBoxFlat.new()
-		active_style.bg_color = Color(0.8, 0.8, 0.0, 0.9)
-		active_style.set_corner_radius_all(8)
-		active_style.content_margin_left = 18
-		active_style.content_margin_right = 18
-		active_style.content_margin_top = 12
-		active_style.content_margin_bottom = 12
+		active_style.bg_color = COLOR_AUTO_ON
+		active_style.set_corner_radius_all(6)
+		active_style.border_width_top = 2
+		active_style.border_color = COLOR_AUTO_ON.lightened(0.3)
+		active_style.border_width_bottom = 3
+		active_style.shadow_color = Color(0.0, 0.0, 0.0, 0.3)
+		active_style.shadow_size = 4
 		auto_node.add_theme_stylebox_override("normal", active_style)
 		auto_node.add_theme_color_override("font_color", Color.BLACK)
 	_auto_next_step()
@@ -862,18 +907,21 @@ func _stop_autoplay(reason: String) -> void:
 	_auto_active = false
 	_auto_running_game = false
 	_info_label.text = "AUTO STOP (%s)" % reason
-	# ボタン色を戻す
-	var auto_node = get_node_or_null("DebugPanel/AutoBtn")
+	# ボタン色を戻す（S-2: ベベルスタイル）
+	var auto_node = get_node_or_null("AutoBtn")
 	if auto_node:
+		var COLOR_AUTO_ACTIVE := Color(0.0, 0.831, 1.0)   # #00D4FF シアンブルー
+		var COLOR_AUTO_TEXT   := Color(0.0, 0.08, 0.12)
 		var normal_style := StyleBoxFlat.new()
-		normal_style.bg_color = Color(0.2, 0.2, 0.3, 0.8)
-		normal_style.set_corner_radius_all(8)
-		normal_style.content_margin_left = 18
-		normal_style.content_margin_right = 18
-		normal_style.content_margin_top = 12
-		normal_style.content_margin_bottom = 12
+		normal_style.bg_color = COLOR_AUTO_ACTIVE
+		normal_style.set_corner_radius_all(6)
+		normal_style.border_width_top = 2
+		normal_style.border_color = COLOR_AUTO_ACTIVE.lightened(0.3)
+		normal_style.border_width_bottom = 3
+		normal_style.shadow_color = Color(0.0, 0.0, 0.0, 0.3)
+		normal_style.shadow_size = 4
 		auto_node.add_theme_stylebox_override("normal", normal_style)
-		auto_node.add_theme_color_override("font_color", Color(1.0, 1.0, 0.3))
+		auto_node.add_theme_color_override("font_color", COLOR_AUTO_TEXT)
 
 func _auto_next_step() -> void:
 	if not _auto_active:
@@ -890,13 +938,7 @@ func _auto_next_step() -> void:
 		if _auto_games_remaining <= 0:
 			_stop_autoplay("games done")
 			return
-	# 条件4: 収支チェック
-	if _auto_stop_on_loss > 0:
-		var current_balance := GameData.total_out - GameData.total_in
-		var diff := current_balance - _auto_start_balance
-		if diff <= -_auto_stop_on_loss:
-			_stop_autoplay("loss limit")
-			return
+	# TODO: β版で収支マイナス停止を実装予定
 
 	var state := SlotEngine.game_state
 	_auto_running_game = true
@@ -935,7 +977,8 @@ func _auto_try_stop(reel_idx: int) -> void:
 
 func _auto_on_game_finished() -> void:
 	## 1G完了後（payout_finished or ハズレ判定後）に呼ばれる
-	if not _auto_active:
+	## ガード: payout_finished → state_changed(IDLE) の二重発火を防止
+	if not _auto_active or not _auto_running_game:
 		return
 	_auto_running_game = false
 

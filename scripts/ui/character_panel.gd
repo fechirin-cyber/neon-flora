@@ -8,6 +8,7 @@ const CHARACTER_SIZE := Vector2(300.0, 200.0)
 
 var _current_character: String = "hikari"
 var _current_reaction: Reaction = Reaction.IDLE
+var _in_bonus: bool = false
 var _char_sprite: TextureRect
 var _textures: Dictionary = {}
 
@@ -60,6 +61,12 @@ func show_character(char_name: String, reaction: Reaction) -> void:
 # --- Signal handlers (§7.7) ---
 
 func _on_flag_determined(flag: PayTable.Flag, production: Dictionary) -> void:
+	if _in_bonus:
+		# ボーナス中はキャラ変更しない（blackout>=2でもリアクションのみ維持）
+		var blackout: int = production.get("blackout", 0)
+		if blackout >= 2:
+			show_character(_current_character, Reaction.EXPECT)
+		return
 	var blackout: int = production.get("blackout", 0)
 	if blackout >= 2:
 		show_character("hikari", Reaction.EXPECT)
@@ -67,6 +74,18 @@ func _on_flag_determined(flag: PayTable.Flag, production: Dictionary) -> void:
 		show_character("hikari", Reaction.IDLE)
 
 func _on_payout_started(_amount: int, flag: PayTable.Flag) -> void:
+	if _in_bonus:
+		# ボーナス中は現在のキャラを維持し、リアクションのみ変更
+		match flag:
+			PayTable.Flag.REPLAY:
+				show_character(_current_character, Reaction.HAPPY)
+			PayTable.Flag.CHERRY_2, PayTable.Flag.CHERRY_4, PayTable.Flag.BELL:
+				show_character(_current_character, Reaction.HAPPY)
+			PayTable.Flag.ICE:
+				show_character(_current_character, Reaction.EXCITED)
+			_:
+				pass
+		return
 	match flag:
 		PayTable.Flag.REPLAY:
 			show_character("hikari", Reaction.HAPPY)
@@ -89,12 +108,14 @@ func _on_all_stopped() -> void:
 		show_character("hikari", Reaction.IDLE)
 
 func _on_bonus_triggered(bonus_type: String) -> void:
+	_in_bonus = true
 	if bonus_type == "BIG":
 		show_character("luna", Reaction.EXCITED)
 	else:
 		show_character("koharu", Reaction.HAPPY)
 
 func _on_bonus_ended(_bonus_type: String, _total_payout: int) -> void:
+	_in_bonus = false
 	show_character("hikari", Reaction.IDLE)
 
 func _on_rt_started(_max_games: int) -> void:

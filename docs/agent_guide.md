@@ -158,7 +158,7 @@
 
 ### AudioManager API
 ```gdscript
-AudioManager.play("lever_pull")      # SE再生
+AudioManager.play_se("lever_pull")    # SE再生
 AudioManager.play_bgm("normal")      # BGM切替
 AudioManager.play_bgm("bonus_big", 0.5)  # フェードイン0.5秒
 AudioManager.stop_bgm(0.3)           # フェードアウト0.3秒

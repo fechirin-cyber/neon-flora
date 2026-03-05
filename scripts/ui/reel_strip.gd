@@ -1,22 +1,22 @@
 extends Control
-## ReelStrip — 1リールの描画+スクロールアニメーション (§9.1-9.3)
-## 実機準拠: 80RPM回転、STOPボタン後0-4コマ滑り即停止（190ms以内）
-## ステッピングモーター制御を再現: 減速カーブなし、コマ送り後スナップ停止
+## ReelStrip - 1リールの描画+スクロールアニメーション (§9.1-9.3)
+## 実機準拠: 80RPM回転、STOPボタン後0-4コマ滑りコマ送り停止（190ms以内）
+## ステッピングモーター制御を再現: 滑りコマ分だけフル速度でコマ送り後スナップ停止
 
-enum ReelState { IDLE, ACCELERATING, FULL_SPEED, BOUNCING }
+enum ReelState { IDLE, ACCELERATING, FULL_SPEED, SLIP_STOPPING, BOUNCING }
 
 # === 物理パラメータ ===
-# 実機法規制上限: 80 RPM。デジタル表示は物理ドラムより速く見えるため微減調整
-# 76 RPM: 76/60 × 21コマ × 164px ≒ 4360 px/sec
-# 1コマ通過: 164px / 4360px/s = 37.6ms
-const MAX_SPEED := 4360.0       # px/sec (~76RPM。調整時はここを変更)
+# 実機法規制上限: 80 RPM
+# 80/60 rps × 21コマ × 164px ≒ 4592 px/sec
+const MAX_SPEED := 4592.0       # px/sec (80RPM)
 const ACCEL_TIME := 0.4         # 加速時間 (特許JP2002159626A: 約0.4秒でフル回転到達)
+const SLIP_ANIM_SPEED := 4592.0 # 滑りコマ送り速度 = フル回転速度
 
 # バウンス（ステッピングモーター停止時の微振動再現）
 # 実機: ホールディングトルクで即座に位置保持。バウンスは極微小
 const BOUNCE_DOWN := 1.5        # 下方向 1.5px (実機はほぼゼロ)
 const BOUNCE_DOWN_TIME := 0.02  # 20ms
-const BOUNCE_UP_TIME := 0.03   # 30ms
+const BOUNCE_UP_TIME := 0.03    # 30ms
 # 合計バウンス: 50ms（実機の「パシッ」という停止感を表現）
 
 # === 図柄サイズ (§4.1, §9.1) ===
@@ -37,8 +37,9 @@ var _reel_idx: int = 0
 var _current_speed: float = 0.0
 var _accel_elapsed: float = 0.0
 
-# 停止ターゲット（request_stop用）
-var _slip_target_pos: int = 0
+# 停止制御
+var _target_stop_pos: int = 0
+var _remaining_slip_px: float = 0.0
 
 # バウンス
 var _bounce_phase: int = 0
@@ -132,14 +133,25 @@ func start_spin() -> void:
 	_accel_elapsed = 0.0
 
 func request_stop(target_pos: int) -> void:
-	## 実機準拠の即停止制御（ステッピングモーター全相励磁制動再現）
-	## STOPボタン押下 → 即座にスナップ停止 → 微バウンス
-	## 実機: 0〜4コマ滑り(0〜143ms)は体感的に「即停止」
-	## ステッピングモーターの全相励磁制動により、ボタンを押した瞬間に停止する感覚
-	_slip_target_pos = target_pos
-	_current_speed = 0.0
-	_snap_to_position(target_pos)
-	_start_bounce()
+	## 実機準拠の停止制御（0-4コマ滑りをフル回転速度でコマ送り後スナップ停止）
+	## ステッピングモーターは滑りコマ分を定速で送り切ってから全相励磁制動
+	if _state != ReelState.FULL_SPEED:
+		return
+	_target_stop_pos = target_pos
+	# 現在位置からtargetまでの滑りコマ数（0-4）を計算
+	var current_center := get_current_center_pos()
+	# リール回転方向: インデックスはDECREASING（上→下スクロール）
+	# 滑りは forward 方向（target_pos >= current_center、ラップアラウンド考慮）
+	var slip_symbols := posmod(target_pos - current_center, _reel_size)
+	# 滑り0コマ = ビタ止まり（即スナップ）
+	if slip_symbols == 0:
+		_snap_to_position(target_pos)
+		_start_bounce()
+		return
+	# 滑りコマ分のピクセル数を計算してSLIP_STOPPING状態へ
+	_remaining_slip_px = float(slip_symbols) * CELL_H
+	_current_speed = SLIP_ANIM_SPEED
+	_state = ReelState.SLIP_STOPPING
 
 func get_state() -> ReelState:
 	return _state
@@ -155,16 +167,20 @@ func snap_to_position(reel_pos: int) -> void:
 	## 外部からの位置設定（中断復帰用）
 	_snap_to_position(reel_pos)
 
-# === _physics_process ===
+## 現在の回転速度比率（0.0=停止、1.0=フル回転）
+func get_speed_ratio() -> float:
+	return _current_speed / MAX_SPEED
 
-func _physics_process(delta: float) -> void:
+# === _process ===
+
+func _process(delta: float) -> void:
 	match _state:
-		ReelState.IDLE:
-			pass
 		ReelState.ACCELERATING:
 			_process_accelerating(delta)
 		ReelState.FULL_SPEED:
 			_process_full_speed(delta)
+		ReelState.SLIP_STOPPING:
+			_process_slip_stopping(delta)
 		ReelState.BOUNCING:
 			_process_bouncing(delta)
 
@@ -183,6 +199,20 @@ func _process_full_speed(delta: float) -> void:
 	## 80RPM定速回転
 	_scroll(delta)
 
+func _process_slip_stopping(delta: float) -> void:
+	## フル回転速度のまま残りピクセルを消化してスナップ停止
+	## 実機: ステッピングモーターはフル速度でコマを送り、目標コマに到達した瞬間に全相励磁制動
+	var move := SLIP_ANIM_SPEED * delta
+	if move >= _remaining_slip_px:
+		# 残りピクセルだけスクロールして即スナップ（オーバーシュートなし）
+		var partial_delta := _remaining_slip_px / SLIP_ANIM_SPEED
+		_scroll(partial_delta)
+		_remaining_slip_px = 0.0
+		_snap_to_position(_target_stop_pos)
+		_start_bounce()
+	else:
+		_remaining_slip_px -= move
+		_scroll(delta)
 
 func _process_bouncing(delta: float) -> void:
 	## ステッピングモーター停止時の微振動（ホールディングトルクで即収束）

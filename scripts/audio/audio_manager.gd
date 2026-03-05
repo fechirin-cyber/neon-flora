@@ -54,6 +54,7 @@ const DUCK_RULES := {
 	"bonus_align": {"db": -12.0, "attack": 0.1, "release": 0.3},
 	"tamaya": {"db": -15.0, "attack": 0.0, "release": 0.3},
 	"medal_out": {"db": -6.0, "attack": 0.2, "release": 0.3},
+	"cherry_win": {"db": -6.0, "attack": 0.1, "release": 0.5},
 }
 
 # --- SEプール ---
@@ -215,15 +216,23 @@ func play_bgm(bgm_name: String, fade_time: float = 0.5) -> void:
 	else:
 		new_player = _bgm_a
 
+	# fade_time <= 0.0 の場合は即時切り替え（Tweenなし）
+	if fade_time <= 0.0:
+		_bgm_active.volume_db = -80.0
+		_bgm_active.stop()
+		new_player.stream = stream
+		new_player.volume_db = 0.0
+		new_player.play()
+		_bgm_active = new_player
+		return
+
 	new_player.stream = stream
 	new_player.volume_db = -80.0
 	new_player.play()
 
 	_bgm_crossfade_tween = create_tween()
-	_bgm_crossfade_tween.set_parallel(true)
 	_bgm_crossfade_tween.tween_property(_bgm_active, "volume_db", -80.0, fade_time)
-	_bgm_crossfade_tween.tween_property(new_player, "volume_db", 0.0, fade_time)
-	_bgm_crossfade_tween.set_parallel(false)
+	_bgm_crossfade_tween.parallel().tween_property(new_player, "volume_db", 0.0, fade_time)
 	_bgm_crossfade_tween.tween_callback(_bgm_active.stop)
 
 	_bgm_active = new_player
@@ -235,6 +244,11 @@ func stop_bgm(fade_time: float = 0.5) -> void:
 	_current_bgm = ""
 	if _bgm_crossfade_tween and _bgm_crossfade_tween.is_valid():
 		_bgm_crossfade_tween.kill()
+	# fade_time <= 0.0 の場合は即時停止（Tweenなし）
+	if fade_time <= 0.0:
+		_bgm_active.volume_db = -80.0
+		_bgm_active.stop()
+		return
 	_bgm_crossfade_tween = create_tween()
 	_bgm_crossfade_tween.tween_property(_bgm_active, "volume_db", -80.0, fade_time)
 	_bgm_crossfade_tween.tween_callback(_bgm_active.stop)
@@ -341,7 +355,11 @@ func _apply_duck(rule: Dictionary, stream: AudioStream) -> void:
 	if stream is AudioStreamWAV:
 		var wav := stream as AudioStreamWAV
 		if wav.mix_rate > 0:
-			duration = float(wav.data.size()) / float(wav.mix_rate * 2)  # 16bit mono
+			var bytes_per_sample := 2
+			if wav.format == AudioStreamWAV.FORMAT_8_BITS:
+				bytes_per_sample = 1
+			var channels := 2 if wav.stereo else 1
+			duration = float(wav.data.size()) / float(wav.mix_rate * bytes_per_sample * channels)
 	elif stream.has_method("get_length"):
 		duration = stream.get_length()
 

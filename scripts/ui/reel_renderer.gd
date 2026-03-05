@@ -35,8 +35,12 @@ func _load_shaders() -> void:
 	_glass_shader = load("res://shaders/reel_glass.gdshader")
 	if ResourceLoader.exists("res://shaders/symbol_glow.gdshader"):
 		_glow_shader = load("res://shaders/symbol_glow.gdshader")
+	else:
+		push_warning("symbol_glow.gdshader not found, payout glow disabled")
 	if ResourceLoader.exists("res://shaders/reel_blur.gdshader"):
 		_blur_shader = load("res://shaders/reel_blur.gdshader")
+	else:
+		push_warning("reel_blur.gdshader not found, motion blur disabled")
 
 func _load_textures() -> void:
 	for sym_id in AssetRegistry.SYMBOL_TEXTURES:
@@ -134,24 +138,22 @@ func _on_strip_accel_done(_reel_idx: int) -> void:
 		all_reels_at_full_speed.emit()
 
 func _physics_process(_delta: float) -> void:
-	# モーションブラー強度をリール速度に連動
-	# NOTE: ブラー無効化中（プロデューサー指示）。再有効化時は strength 計算を復元
-	#var _blur_enabled := false  # true にするとブラー有効化
+	# モーションブラー強度をリール速度に連動（FULL_SPEED時にフル適用）
 	for i in range(_reel_strips.size()):
 		var mat: ShaderMaterial = _blur_materials[i] if i < _blur_materials.size() else null
 		if mat == null:
 			continue
 		var strip = _reel_strips[i]
-		#var strength: float = strip._current_speed / strip.MAX_SPEED
-		var strength: float = 0.0  # ブラー無効（微量かける場合は上行を復元）
+		# 速度比率を blur_strength として渡す（加速中は徐々に強まる、停止で即ゼロ）
+		var strength: float = strip.get_speed_ratio()
 		mat.set_shader_parameter("blur_strength", strength)
+		# TextureRect にシェーダーマテリアルを適用（未適用なら設定）
 		if strip._strip_node and strip._strip_node.get_child_count() > 0:
 			var tex_rect: TextureRect = strip._strip_node.get_child(0) as TextureRect
 			if tex_rect == null:
 				continue
-			# ブラー無効中: マテリアル適用しない
-			if tex_rect.material == mat:
-				tex_rect.material = null
+			if tex_rect.material != mat:
+				tex_rect.material = mat
 
 func _on_reel_stop_calculated(reel_idx: int, target_pos: int, _window: Array) -> void:
 	if reel_idx >= 0 and reel_idx < _reel_strips.size():

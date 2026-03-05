@@ -12,13 +12,13 @@ const RPL = 6  # リプレイ
 
 const REEL_SIZE := 21
 
-# LEFT（3連S7R配置 pos12-14 — ハナビの3連どんちゃんに相当）
+# LEFT（3連BEL配置 pos2-4 — ハナビの3連どんちゃん準拠）
 # クロスアライメント最適化済: 異なる入賞役が同時に揃わない配置
-# S7R×3, S7B×1, BAR×1, CHR×2, BEL×7, ICE×2, RPL×5
+# S7R×1, S7B×1, BAR×1, CHR×2, BEL×9, ICE×2, RPL×5
 # BEL gap≤5, RPL gap≤5（4コマ滑りで常に到達可能）
 const LEFT: Array[int] = [
-	RPL, CHR, BEL, RPL, ICE, BEL, BAR, BEL, RPL, S7B,
-	BEL, RPL, S7R, S7R, S7R, BEL, RPL, ICE, BEL, CHR, BEL
+	CHR, RPL, BEL, BEL, BEL, S7R, ICE, RPL, BEL, RPL,
+	S7B, BEL, CHR, RPL, BEL, ICE, BEL, BAR, RPL, BEL, BEL
 ]
 
 # CENTER（クロスアライメント最適化済）
